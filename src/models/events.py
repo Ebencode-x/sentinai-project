@@ -27,4 +27,6 @@ class RemediationSuggestion(BaseModel):
     proposed_config_change: str
     confidence: float = Field(..., ge=0.0, le=1.0)
     risks: str
+    source: Literal["stub", "provider", "fallback"] = "stub"
+    provider_error: str | None = None
 

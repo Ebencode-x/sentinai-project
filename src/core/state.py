@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Deque
 
@@ -28,13 +28,23 @@ class AppState:
     recent_suggestions: Deque[RemediationSuggestion] = field(
         default_factory=lambda: deque(maxlen=settings.max_recent_incidents)
     )
+    _incident_dedupe: OrderedDict[str, None] = field(default_factory=OrderedDict)
 
     def scan_logs_once(self) -> int:
         incidents = self.watcher.scan_once()
+        added = 0
         for incident in incidents:
+            if incident.incident_id in self._incident_dedupe:
+                continue
+            self._incident_dedupe[incident.incident_id] = None
+            max_window = max(1, settings.incident_dedupe_window)
+            while len(self._incident_dedupe) > max_window:
+                self._incident_dedupe.popitem(last=False)
+
             self.recent_incidents.append(incident)
             self.recent_suggestions.append(self.remediation_engine.suggest_fix(incident))
-        return len(incidents)
+            added += 1
+        return added
 
 
 app_state = AppState()

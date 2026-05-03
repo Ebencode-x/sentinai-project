@@ -7,13 +7,17 @@ placeholder implementation. Swap `StubLLMClient` with concrete providers
 
 from __future__ import annotations
 
+import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Literal
 
 import httpx
 
 from src.core.config import settings
 from src.models.events import LogIncident, RemediationSuggestion
+
+logger = logging.getLogger(__name__)
 
 
 class BaseLLMClient(ABC):
@@ -46,6 +50,8 @@ class StubLLMClient(BaseLLMClient):
             ),
             confidence=0.62,
             risks="Suggestion is heuristic. Validate with tests before rollout.",
+            source="stub",
+            provider_error=None,
         )
 
 
@@ -72,17 +78,15 @@ class OpenAILLMClient(BaseLLMClient):
         }
         headers = {"Authorization": f"Bearer {self._api_key}"}
 
-        with httpx.Client(timeout=self._timeout_seconds) as client:
-            response = client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            body = response.json()
+        body = _post_json_with_retry(
+            url="https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json_body=payload,
+            timeout_seconds=self._timeout_seconds,
+        )
 
         content = body["choices"][0]["message"]["content"]
-        return _parse_text_response(content)
+        return _parse_text_response(content, source="provider")
 
 
 class ClaudeLLMClient(BaseLLMClient):
@@ -106,18 +110,16 @@ class ClaudeLLMClient(BaseLLMClient):
             "anthropic-version": "2023-06-01",
         }
 
-        with httpx.Client(timeout=self._timeout_seconds) as client:
-            response = client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            body = response.json()
+        body = _post_json_with_retry(
+            url="https://api.anthropic.com/v1/messages",
+            headers=headers,
+            json_body=payload,
+            timeout_seconds=self._timeout_seconds,
+        )
 
         text_chunks = [item.get("text", "") for item in body.get("content", []) if item.get("type") == "text"]
         content = "\n".join(chunk for chunk in text_chunks if chunk.strip())
-        return _parse_text_response(content)
+        return _parse_text_response(content, source="provider")
 
 
 def build_llm_client() -> BaseLLMClient:
@@ -166,7 +168,11 @@ def _incident_prompt(incident: LogIncident) -> str:
     )
 
 
-def _parse_text_response(text: str) -> RemediationSuggestion:
+def _parse_text_response(
+    text: str,
+    *,
+    source: Literal["stub", "provider", "fallback"] = "provider",
+) -> RemediationSuggestion:
     """Best-effort parser for simple sectioned LLM outputs."""
     sections = _extract_sections(text)
 
@@ -183,7 +189,61 @@ def _parse_text_response(text: str) -> RemediationSuggestion:
         proposed_config_change=sections.get("CONFIG_CHANGE", "No config change proposed."),
         confidence=max(0.0, min(1.0, confidence_value)),
         risks=sections.get("RISKS", "No risks provided."),
+        source=source,
+        provider_error=None,
     )
+
+
+def _post_json_with_retry(
+    *,
+    url: str,
+    headers: dict[str, str],
+    json_body: dict,
+    timeout_seconds: float,
+) -> dict:
+    """POST JSON with exponential backoff on transient failures."""
+    max_retries = max(1, settings.llm_max_retries)
+    backoff = max(0.1, settings.llm_retry_backoff_seconds)
+    last_error: Exception | None = None
+
+    for attempt in range(max_retries):
+        try:
+            with httpx.Client(timeout=timeout_seconds) as client:
+                response = client.post(url, headers=headers, json=json_body)
+
+            if response.is_success:
+                return response.json()
+
+            if _is_retryable_http_status(response.status_code):
+                last_error = httpx.HTTPStatusError(
+                    f"HTTP {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+            else:
+                response.raise_for_status()
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError, httpx.WriteError) as exc:
+            last_error = exc
+
+        if attempt < max_retries - 1:
+            sleep_s = backoff * (2**attempt)
+            logger.warning(
+                "LLM request failed (attempt %s/%s), retrying in %.2fs: %s",
+                attempt + 1,
+                max_retries,
+                sleep_s,
+                last_error,
+            )
+            time.sleep(sleep_s)
+
+    assert last_error is not None
+    raise last_error
+
+
+def _is_retryable_http_status(status_code: int) -> bool:
+    if status_code == 429:
+        return True
+    return status_code in (500, 502, 503, 504)
 
 
 def _extract_sections(text: str) -> dict[str, str]:

@@ -108,7 +108,10 @@ docker compose up --build
 - `GET /health` - service readiness.
 - `GET /incidents` - recently detected incidents.
 - `GET /suggestions` - most recent AI remediation suggestions.
+- `GET /suggestions/latest` - newest suggestion only (404 if none yet).
 - `POST /scan-now` - manual scan trigger for demo purposes.
+
+Duplicate incidents with the same fingerprint are skipped within a sliding window (`INCIDENT_DEDUPE_WINDOW`) so repeated log lines do not spam the API.
 
 ## AI Integration (Scaffold Status)
 
@@ -131,7 +134,11 @@ Example environment setup:
 LLM_PROVIDER=openai
 LLM_API_KEY=your_api_key_here
 LLM_MODEL=gpt-4o-mini
+LLM_MAX_RETRIES=3
+LLM_RETRY_BACKOFF_SECONDS=1.0
 ```
+
+Provider HTTP calls retry transient errors (429, 5xx, timeouts) with exponential backoff. If all retries fail, `RemediationEngine` returns a `fallback` suggestion with `provider_error` populated instead of breaking the API.
 
 ## Security and Safety Notes
 

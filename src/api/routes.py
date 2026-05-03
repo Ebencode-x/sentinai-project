@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from src.core.state import app_state
 
@@ -22,6 +22,13 @@ def incidents() -> list[dict]:
 @router.get("/suggestions")
 def suggestions() -> list[dict]:
     return [item.model_dump(mode="json") for item in app_state.recent_suggestions]
+
+
+@router.get("/suggestions/latest")
+def suggestions_latest() -> dict:
+    if not app_state.recent_suggestions:
+        raise HTTPException(status_code=404, detail="No suggestions yet. Run POST /scan-now after errors appear in logs.")
+    return app_state.recent_suggestions[-1].model_dump(mode="json")
 
 
 @router.post("/scan-now")

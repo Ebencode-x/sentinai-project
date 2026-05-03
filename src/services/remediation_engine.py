@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from src.integrations.llm_client import BaseLLMClient, build_llm_client
+import logging
+
+from src.integrations.llm_client import BaseLLMClient, StubLLMClient, build_llm_client
 from src.models.events import LogIncident, RemediationSuggestion
+
+logger = logging.getLogger(__name__)
 
 
 class RemediationEngine:
@@ -11,8 +15,21 @@ class RemediationEngine:
 
     def __init__(self, llm_client: BaseLLMClient | None = None) -> None:
         self._llm_client = llm_client or build_llm_client()
+        self._stub = StubLLMClient()
 
     def suggest_fix(self, incident: LogIncident) -> RemediationSuggestion:
         """Ask the configured LLM client for remediation guidance."""
-        return self._llm_client.analyze_incident(incident)
+        try:
+            return self._llm_client.analyze_incident(incident)
+        except Exception as exc:
+            logger.warning("LLM analysis failed; returning stub-based fallback: %s", exc)
+            base = self._stub.analyze_incident(incident)
+            return base.model_copy(
+                update={
+                    "source": "fallback",
+                    "provider_error": str(exc)[:4000],
+                    "summary": f"{base.summary} (Provider error; heuristic fallback.)",
+                    "confidence": min(base.confidence, 0.35),
+                }
+            )
 
