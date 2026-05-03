@@ -14,6 +14,11 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "sentinai"}
 
 
+@router.get("/stats")
+def stats() -> dict:
+    return app_state.stats_snapshot()
+
+
 @router.get("/incidents")
 def incidents() -> list[dict]:
     return [incident.model_dump(mode="json") for incident in app_state.recent_incidents]

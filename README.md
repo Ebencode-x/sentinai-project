@@ -103,9 +103,14 @@ Run:
 docker compose up --build
 ```
 
+## Continuous integration
+
+GitHub Actions runs tests and a compile check on every push and pull request to `main` (see `.github/workflows/ci.yml`).
+
 ## API Outline
 
 - `GET /health` - service readiness.
+- `GET /stats` - lightweight runtime metrics (buffer sizes, dedupe state, scan counts, suggestion sources).
 - `GET /incidents` - recently detected incidents.
 - `GET /suggestions` - most recent AI remediation suggestions.
 - `GET /suggestions/latest` - newest suggestion only (404 if none yet).

@@ -49,7 +49,8 @@ class LogWatcher:
 
     STACKTRACE_CONTINUATION_PATTERNS = (
         re.compile(r"^\s+File\s+\".*\", line \d+"),  # Python traceback frames
-        re.compile(r"^\s+[A-Za-z_][A-Za-z0-9_]*Error:"),  # Error summary lines
+        re.compile(r"^\s+[A-Za-z_][A-Za-z0-9_]*Error:"),  # Indented error summary lines
+        re.compile(r"^[A-Za-z_][A-Za-z0-9_]*Error:.*"),  # Column-0 Python errors (common in logs)
         re.compile(r"^\s+at\s+"),  # Typical JS/TS stack trace lines
         re.compile(r"^\s+\.\.\."),  # Continuation marker
     )
