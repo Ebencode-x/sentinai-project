@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  sentinai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinai-agent
+    env_file:
+      - .env.example
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      - vulnerable-app
+
+  vulnerable-app:
+    build:
+      context: ./vulnerable-app
+      dockerfile: Dockerfile
+    container_name: vulnerable-app
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "9000:9000"
+
