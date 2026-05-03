@@ -19,6 +19,11 @@ def incidents() -> list[dict]:
     return [incident.model_dump(mode="json") for incident in app_state.recent_incidents]
 
 
+@router.get("/suggestions")
+def suggestions() -> list[dict]:
+    return [item.model_dump(mode="json") for item in app_state.recent_suggestions]
+
+
 @router.post("/scan-now")
 def scan_now() -> dict[str, int]:
     count = app_state.scan_logs_once()

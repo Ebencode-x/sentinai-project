@@ -107,6 +107,7 @@ docker compose up --build
 
 - `GET /health` - service readiness.
 - `GET /incidents` - recently detected incidents.
+- `GET /suggestions` - most recent AI remediation suggestions.
 - `POST /scan-now` - manual scan trigger for demo purposes.
 
 ## AI Integration (Scaffold Status)
@@ -117,6 +118,20 @@ Planned provider implementations:
 
 - OpenAI GPT-4.x
 - Anthropic Claude
+
+Current implementation status:
+
+- `LLM_PROVIDER=stub` (default) uses deterministic local suggestions.
+- `LLM_PROVIDER=openai` uses Chat Completions API when `LLM_API_KEY` is set.
+- `LLM_PROVIDER=claude` uses Anthropic Messages API when `LLM_API_KEY` is set.
+
+Example environment setup:
+
+```bash
+LLM_PROVIDER=openai
+LLM_API_KEY=your_api_key_here
+LLM_MODEL=gpt-4o-mini
+```
 
 ## Security and Safety Notes
 
