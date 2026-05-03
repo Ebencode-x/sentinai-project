@@ -148,8 +148,8 @@ Provider HTTP calls retry transient errors (429, 5xx, timeouts) with exponential
 
 ## Next Milestones
 
-1. Add real OpenAI/Claude adapters with retries and rate limiting.
-2. Add incident deduplication and fingerprint clustering.
-3. Add "suggested patch" generation with unit-test guidance.
-4. Add Slack/Webhook notifications and issue tracker integration.
+1. Add structured JSON output mode for LLM responses (schema validation + stricter parsing).
+2. Add automated "suggested patch" generation with unit-test guidance.
+3. Add Slack/Webhook notifications and issue tracker integration.
+4. Add observability metrics (incident counts, provider latency, fallback rate).
 
