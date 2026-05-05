@@ -3,22 +3,45 @@
 This module intentionally contains a provider-agnostic interface and a
 placeholder implementation. Swap `StubLLMClient` with concrete providers
 (OpenAI, Anthropic, etc.) in production.
+
+Milestone 1: LLM responses are now requested as strict JSON and validated
+with Pydantic. Fallback chain: JSON parse -> section parser -> stub summary.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import Literal
 
 import httpx
+from pydantic import BaseModel, Field, ValidationError
 
 from src.core.config import settings
 from src.models.events import LogIncident, RemediationSuggestion
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# JSON schema model — matches what we ask the LLM to return.
+# ---------------------------------------------------------------------------
+
+class _LLMJsonResponse(BaseModel):
+    """Expected JSON structure from the LLM. All fields required."""
+
+    summary: str = Field(..., min_length=1)
+    code_fix: str = Field(..., min_length=1)
+    config_change: str = Field(..., min_length=1)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    risks: str = Field(..., min_length=1)
+
+
+# ---------------------------------------------------------------------------
+# Abstract base
+# ---------------------------------------------------------------------------
 
 class BaseLLMClient(ABC):
     """Abstract interface for analyzing incidents with an LLM."""
@@ -28,6 +51,10 @@ class BaseLLMClient(ABC):
         """Return a remediation suggestion generated from incident context."""
         raise NotImplementedError
 
+
+# ---------------------------------------------------------------------------
+# Stub (local, no API key required)
+# ---------------------------------------------------------------------------
 
 class StubLLMClient(BaseLLMClient):
     """Safe local placeholder that mimics an AI response.
@@ -55,12 +82,12 @@ class StubLLMClient(BaseLLMClient):
         )
 
 
-class OpenAILLMClient(BaseLLMClient):
-    """Simple OpenAI Chat Completions adapter.
+# ---------------------------------------------------------------------------
+# OpenAI adapter
+# ---------------------------------------------------------------------------
 
-    This implementation is intentionally minimal and API-key based.
-    It extracts plain text from the response and maps it to our model.
-    """
+class OpenAILLMClient(BaseLLMClient):
+    """OpenAI Chat Completions adapter with structured JSON output."""
 
     def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
         self._api_key = api_key
@@ -85,16 +112,20 @@ class OpenAILLMClient(BaseLLMClient):
             timeout_seconds=self._timeout_seconds,
         )
 
-        content = body["choices"][0]["message"]["content"]
-        return _parse_text_response(content, source="provider")
+        raw_content = body["choices"][0]["message"]["content"]
+        return _parse_llm_output(raw_content, source="provider")
 
+
+# ---------------------------------------------------------------------------
+# Claude adapter
+# ---------------------------------------------------------------------------
 
 class ClaudeLLMClient(BaseLLMClient):
-    """Simple Anthropic Messages API adapter."""
+    """Anthropic Messages API adapter with structured JSON output."""
 
     def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
         self._api_key = api_key
-        self._model = model or "claude-3-5-sonnet-latest"
+        self._model = model or "claude-sonnet-4-20250514"
         self._timeout_seconds = timeout_seconds
 
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:
@@ -117,16 +148,23 @@ class ClaudeLLMClient(BaseLLMClient):
             timeout_seconds=self._timeout_seconds,
         )
 
-        text_chunks = [item.get("text", "") for item in body.get("content", []) if item.get("type") == "text"]
-        content = "\n".join(chunk for chunk in text_chunks if chunk.strip())
-        return _parse_text_response(content, source="provider")
+        text_chunks = [
+            item.get("text", "")
+            for item in body.get("content", [])
+            if item.get("type") == "text"
+        ]
+        raw_content = "\n".join(chunk for chunk in text_chunks if chunk.strip())
+        return _parse_llm_output(raw_content, source="provider")
 
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
 
 def build_llm_client() -> BaseLLMClient:
-    """Factory: choose concrete LLM client by environment configuration.
+    """Choose concrete LLM client by environment configuration.
 
-    Falls back to `StubLLMClient` to keep local demos resilient even when
-    provider keys are missing or intentionally disabled.
+    Falls back to StubLLMClient when provider keys are missing or disabled.
     """
     provider = settings.llm_provider.strip().lower()
 
@@ -145,21 +183,33 @@ def build_llm_client() -> BaseLLMClient:
     return StubLLMClient()
 
 
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
 def _system_prompt() -> str:
     return (
         "You are a senior SRE and backend engineer. "
-        "Analyze runtime failures and provide practical, low-risk remediation guidance."
+        "Analyze runtime failures and provide practical, low-risk remediation guidance. "
+        "Always respond with a single raw JSON object — no markdown, no code fences, "
+        "no explanation outside the JSON."
     )
 
 
 def _incident_prompt(incident: LogIncident) -> str:
     return (
-        "Return five sections exactly in this format:\n"
-        "SUMMARY:\n"
-        "CODE_FIX:\n"
-        "CONFIG_CHANGE:\n"
-        "CONFIDENCE:\n"
-        "RISKS:\n\n"
+        "Respond with ONLY a raw JSON object using exactly these keys:\n"
+        "{\n"
+        '  "summary": "...",\n'
+        '  "code_fix": "...",\n'
+        '  "config_change": "...",\n'
+        '  "confidence": 0.0,\n'
+        '  "risks": "..."\n'
+        "}\n\n"
+        "Rules:\n"
+        "- confidence must be a float between 0.0 and 1.0\n"
+        "- No markdown, no code fences, no text before or after the JSON\n"
+        "- All string values must be on a single line (no embedded newlines)\n\n"
         f"Incident ID: {incident.incident_id}\n"
         f"Severity: {incident.severity}\n"
         f"Trigger line: {incident.trigger_line}\n"
@@ -168,13 +218,101 @@ def _incident_prompt(incident: LogIncident) -> str:
     )
 
 
-def _parse_text_response(
+# ---------------------------------------------------------------------------
+# Response parsing — JSON first, section parser fallback, stub last
+# ---------------------------------------------------------------------------
+
+def _parse_llm_output(
     text: str,
     *,
     source: Literal["stub", "provider", "fallback"] = "provider",
 ) -> RemediationSuggestion:
-    """Best-effort parser for simple sectioned LLM outputs."""
+    """Three-stage fallback chain for LLM response parsing.
+
+    Stage 1: Strict JSON parse + Pydantic validation.
+    Stage 2: Legacy section-based text parser (handles off-format responses).
+    Stage 3: Return stub summary so the API never returns an empty suggestion.
+    """
+    # Stage 1 — JSON
+    suggestion = _try_parse_json(text, source=source)
+    if suggestion is not None:
+        return suggestion
+
+    logger.warning("JSON parse failed; attempting section parser fallback.")
+
+    # Stage 2 — legacy section parser
+    suggestion = _try_parse_sections(text, source=source)
+    if suggestion is not None:
+        return suggestion
+
+    logger.warning("Section parser also failed; using stub summary as last resort.")
+
+    # Stage 3 — stub summary with provider_error note
+    return RemediationSuggestion(
+        summary="Could not parse LLM response. Raw output logged for inspection.",
+        proposed_code_fix="Review raw LLM output manually.",
+        proposed_config_change="No config change derived.",
+        confidence=0.1,
+        risks="Response parsing failed entirely. Do not act on this suggestion.",
+        source="fallback",
+        provider_error=f"Unparseable response (first 300 chars): {text[:300]}",
+    )
+
+
+def _strip_fences(text: str) -> str:
+    """Remove markdown code fences that models sometimes add despite instructions."""
+    # Matches ```json ... ``` or ``` ... ``` with optional language tag
+    fenced = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE)
+    fenced = re.sub(r"\s*```$", "", fenced.strip())
+    return fenced.strip()
+
+
+def _try_parse_json(
+    text: str,
+    *,
+    source: Literal["stub", "provider", "fallback"],
+) -> RemediationSuggestion | None:
+    """Attempt strict JSON parse and Pydantic validation.
+
+    Returns None on any failure so the caller can try the next stage.
+    """
+    cleaned = _strip_fences(text)
+
+    try:
+        raw = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.debug("JSON decode error: %s | raw (first 200): %.200s", exc, cleaned)
+        return None
+
+    try:
+        validated = _LLMJsonResponse.model_validate(raw)
+    except ValidationError as exc:
+        logger.debug("Pydantic validation error: %s", exc)
+        return None
+
+    return RemediationSuggestion(
+        summary=validated.summary,
+        proposed_code_fix=validated.code_fix,
+        proposed_config_change=validated.config_change,
+        confidence=validated.confidence,
+        risks=validated.risks,
+        source=source,
+        provider_error=None,
+    )
+
+
+def _try_parse_sections(
+    text: str,
+    *,
+    source: Literal["stub", "provider", "fallback"],
+) -> RemediationSuggestion | None:
+    """Legacy section-based parser kept as fallback.
+
+    Returns None if no recognisable sections are found.
+    """
     sections = _extract_sections(text)
+    if not sections:
+        return None
 
     confidence_value = 0.5
     raw_confidence = sections.get("CONFIDENCE", "0.5")
@@ -193,6 +331,10 @@ def _parse_text_response(
         provider_error=None,
     )
 
+
+# ---------------------------------------------------------------------------
+# HTTP helper
+# ---------------------------------------------------------------------------
 
 def _post_json_with_retry(
     *,
@@ -247,6 +389,7 @@ def _is_retryable_http_status(status_code: int) -> bool:
 
 
 def _extract_sections(text: str) -> dict[str, str]:
+    """Parse SECTION: ... style text into a dict. Returns empty dict on no match."""
     keys = ("SUMMARY", "CODE_FIX", "CONFIG_CHANGE", "CONFIDENCE", "RISKS")
     output: dict[str, str] = {}
     current_key = ""
@@ -261,13 +404,10 @@ def _extract_sections(text: str) -> dict[str, str]:
             current_key = maybe_key
             current_lines = []
             continue
-
         if current_key:
             current_lines.append(raw_line)
 
     if current_key:
         output[current_key] = "\n".join(current_lines).strip()
-    if not output:
-        output["SUMMARY"] = text.strip() or "Empty response."
-    return output
 
+    return output

@@ -1,2 +1,1 @@
-"""SentinAI source package."""
 
