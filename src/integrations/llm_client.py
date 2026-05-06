@@ -1,11 +1,7 @@
 """LLM integration scaffold for incident analysis.
 
-This module intentionally contains a provider-agnostic interface and a
-placeholder implementation. Swap `StubLLMClient` with concrete providers
-(OpenAI, Anthropic, etc.) in production.
-
-Milestone 1: LLM responses are now requested as strict JSON and validated
-with Pydantic. Fallback chain: JSON parse -> section parser -> stub summary.
+Milestone 1: Structured JSON output with Pydantic validation and 3-stage fallback.
+Milestone 2: proposed_patch and test_guidance fields added to LLM schema and stub.
 """
 
 from __future__ import annotations
@@ -37,6 +33,8 @@ class _LLMJsonResponse(BaseModel):
     config_change: str = Field(..., min_length=1)
     confidence: float = Field(..., ge=0.0, le=1.0)
     risks: str = Field(..., min_length=1)
+    proposed_patch: str = Field(..., min_length=1)
+    test_guidance: str = Field(..., min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +77,26 @@ class StubLLMClient(BaseLLMClient):
             risks="Suggestion is heuristic. Validate with tests before rollout.",
             source="stub",
             provider_error=None,
+            proposed_patch=(
+                "# Before\n"
+                "def handle_request(data):\n"
+                "    result = process(data)  # may raise\n"
+                "    return result\n\n"
+                "# After\n"
+                "def handle_request(data):\n"
+                "    try:\n"
+                "        result = process(data)\n"
+                "        return result\n"
+                "    except Exception as exc:\n"
+                "        logger.exception('handle_request failed: %s', exc)\n"
+                "        raise HTTPException(status_code=500, detail='Internal error') from exc\n"
+            ),
+            test_guidance=(
+                "1. Mock process() to raise ValueError and assert the endpoint returns HTTP 500.\n"
+                "2. Assert the logger.exception call is made with the correct message.\n"
+                "3. Verify the response body contains 'Internal error' and not the raw traceback.\n"
+                "4. Add a happy-path test confirming valid input still returns the correct result."
+            ),
         )
 
 
@@ -131,7 +149,7 @@ class ClaudeLLMClient(BaseLLMClient):
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:
         payload = {
             "model": self._model,
-            "max_tokens": 900,
+            "max_tokens": 1200,
             "temperature": 0.2,
             "system": _system_prompt(),
             "messages": [{"role": "user", "content": _incident_prompt(incident)}],
@@ -162,10 +180,7 @@ class ClaudeLLMClient(BaseLLMClient):
 # ---------------------------------------------------------------------------
 
 def build_llm_client() -> BaseLLMClient:
-    """Choose concrete LLM client by environment configuration.
-
-    Falls back to StubLLMClient when provider keys are missing or disabled.
-    """
+    """Choose concrete LLM client by environment configuration."""
     provider = settings.llm_provider.strip().lower()
 
     if provider == "openai" and settings.llm_api_key:
@@ -200,16 +215,20 @@ def _incident_prompt(incident: LogIncident) -> str:
     return (
         "Respond with ONLY a raw JSON object using exactly these keys:\n"
         "{\n"
-        '  "summary": "...",\n'
-        '  "code_fix": "...",\n'
-        '  "config_change": "...",\n'
+        '  "summary": "one-line description of the failure",\n'
+        '  "code_fix": "description of the code change needed",\n'
+        '  "config_change": "description of any config tuning needed",\n'
         '  "confidence": 0.0,\n'
-        '  "risks": "..."\n'
+        '  "risks": "what could go wrong applying this fix",\n'
+        '  "proposed_patch": "concrete code snippet or unified diff showing the fix",\n'
+        '  "test_guidance": "numbered list of unit tests to write to validate the patch"\n'
         "}\n\n"
         "Rules:\n"
         "- confidence must be a float between 0.0 and 1.0\n"
+        "- proposed_patch should be a real code snippet, not a description\n"
+        "- test_guidance should be a numbered list of specific test cases\n"
         "- No markdown, no code fences, no text before or after the JSON\n"
-        "- All string values must be on a single line (no embedded newlines)\n\n"
+        "- Escape any double quotes inside string values with \\\"\n\n"
         f"Incident ID: {incident.incident_id}\n"
         f"Severity: {incident.severity}\n"
         f"Trigger line: {incident.trigger_line}\n"
@@ -230,24 +249,21 @@ def _parse_llm_output(
     """Three-stage fallback chain for LLM response parsing.
 
     Stage 1: Strict JSON parse + Pydantic validation.
-    Stage 2: Legacy section-based text parser (handles off-format responses).
-    Stage 3: Return stub summary so the API never returns an empty suggestion.
+    Stage 2: Legacy section-based text parser.
+    Stage 3: Stub summary so the API never returns empty.
     """
-    # Stage 1 — JSON
     suggestion = _try_parse_json(text, source=source)
     if suggestion is not None:
         return suggestion
 
     logger.warning("JSON parse failed; attempting section parser fallback.")
 
-    # Stage 2 — legacy section parser
     suggestion = _try_parse_sections(text, source=source)
     if suggestion is not None:
         return suggestion
 
     logger.warning("Section parser also failed; using stub summary as last resort.")
 
-    # Stage 3 — stub summary with provider_error note
     return RemediationSuggestion(
         summary="Could not parse LLM response. Raw output logged for inspection.",
         proposed_code_fix="Review raw LLM output manually.",
@@ -256,12 +272,13 @@ def _parse_llm_output(
         risks="Response parsing failed entirely. Do not act on this suggestion.",
         source="fallback",
         provider_error=f"Unparseable response (first 300 chars): {text[:300]}",
+        proposed_patch=None,
+        test_guidance=None,
     )
 
 
 def _strip_fences(text: str) -> str:
     """Remove markdown code fences that models sometimes add despite instructions."""
-    # Matches ```json ... ``` or ``` ... ``` with optional language tag
     fenced = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE)
     fenced = re.sub(r"\s*```$", "", fenced.strip())
     return fenced.strip()
@@ -272,10 +289,7 @@ def _try_parse_json(
     *,
     source: Literal["stub", "provider", "fallback"],
 ) -> RemediationSuggestion | None:
-    """Attempt strict JSON parse and Pydantic validation.
-
-    Returns None on any failure so the caller can try the next stage.
-    """
+    """Attempt strict JSON parse and Pydantic validation. Returns None on failure."""
     cleaned = _strip_fences(text)
 
     try:
@@ -298,6 +312,8 @@ def _try_parse_json(
         risks=validated.risks,
         source=source,
         provider_error=None,
+        proposed_patch=validated.proposed_patch,
+        test_guidance=validated.test_guidance,
     )
 
 
@@ -306,10 +322,7 @@ def _try_parse_sections(
     *,
     source: Literal["stub", "provider", "fallback"],
 ) -> RemediationSuggestion | None:
-    """Legacy section-based parser kept as fallback.
-
-    Returns None if no recognisable sections are found.
-    """
+    """Legacy section-based parser kept as fallback. Returns None on no match."""
     sections = _extract_sections(text)
     if not sections:
         return None
@@ -329,6 +342,8 @@ def _try_parse_sections(
         risks=sections.get("RISKS", "No risks provided."),
         source=source,
         provider_error=None,
+        proposed_patch=sections.get("PROPOSED_PATCH", None),
+        test_guidance=sections.get("TEST_GUIDANCE", None),
     )
 
 
@@ -389,8 +404,8 @@ def _is_retryable_http_status(status_code: int) -> bool:
 
 
 def _extract_sections(text: str) -> dict[str, str]:
-    """Parse SECTION: ... style text into a dict. Returns empty dict on no match."""
-    keys = ("SUMMARY", "CODE_FIX", "CONFIG_CHANGE", "CONFIDENCE", "RISKS")
+    """Parse SECTION: style text into a dict. Returns empty dict on no match."""
+    keys = ("SUMMARY", "CODE_FIX", "CONFIG_CHANGE", "CONFIDENCE", "RISKS", "PROPOSED_PATCH", "TEST_GUIDANCE")
     output: dict[str, str] = {}
     current_key = ""
     current_lines: list[str] = []

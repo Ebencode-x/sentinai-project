@@ -20,7 +20,12 @@ class LogIncident(BaseModel):
 
 
 class RemediationSuggestion(BaseModel):
-    """LLM-generated recommendation for remediation."""
+    """LLM-generated recommendation for remediation.
+
+    Milestone 2 additions:
+    - proposed_patch: concrete code snippet or unified diff the LLM suggests applying.
+    - test_guidance: unit-test hints to validate the patch before rollout.
+    """
 
     summary: str
     proposed_code_fix: str
@@ -30,3 +35,12 @@ class RemediationSuggestion(BaseModel):
     source: Literal["stub", "provider", "fallback"] = "stub"
     provider_error: str | None = None
 
+    # Milestone 2 fields — optional so existing data stays valid.
+    proposed_patch: str | None = Field(
+        default=None,
+        description="Concrete code patch or unified diff suggested by the LLM.",
+    )
+    test_guidance: str | None = Field(
+        default=None,
+        description="Unit-test hints to validate the patch before rollout.",
+    )
