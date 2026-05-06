@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import Deque
 
 from src.core.config import settings
+from src.core.metrics import metrics
+from src.integrations.notifier import notify
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.remediation_engine import RemediationEngine
 from src.services.watcher import LogWatcher, WatcherConfig
@@ -46,15 +48,21 @@ class AppState:
                 self._incident_dedupe.popitem(last=False)
 
             self.recent_incidents.append(incident)
-            self.recent_suggestions.append(self.remediation_engine.suggest_fix(incident))
+            suggestion = self.remediation_engine.suggest_fix(incident)
+            self.recent_suggestions.append(suggestion)
+
+            # Milestone 3: fire Slack + webhook notifications
+            notify(incident, suggestion)
+
             added += 1
+
         self.total_scan_runs += 1
         self.last_scan_at_utc = datetime.now(timezone.utc)
         self.last_scan_new_incidents = added
         return added
 
     def stats_snapshot(self) -> dict:
-        """Lightweight runtime metrics for demos and future observability export."""
+        """Lightweight runtime metrics for demos and observability export."""
         by_source: dict[str, int] = {"stub": 0, "provider": 0, "fallback": 0}
         for suggestion in self.recent_suggestions:
             key = suggestion.source
@@ -73,8 +81,8 @@ class AppState:
             "last_scan_at_utc": self.last_scan_at_utc.isoformat() if self.last_scan_at_utc else None,
             "last_scan_new_incidents": self.last_scan_new_incidents,
             "recent_suggestions_by_source": by_source,
+            "llm_metrics": metrics.snapshot(),
         }
 
 
 app_state = AppState()
-
