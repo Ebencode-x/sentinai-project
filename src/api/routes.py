@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import PlainTextResponse
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
+from src.core.metrics import shared_registry
 from src.core.state import app_state
 
 router = APIRouter()
@@ -17,6 +20,15 @@ def health() -> dict[str, str]:
 @router.get("/stats")
 def stats() -> dict:
     return app_state.stats_snapshot()
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def prometheus_metrics() -> PlainTextResponse:
+    """Prometheus text exposition format - scrape with prometheus.yml."""
+    return PlainTextResponse(
+        content=generate_latest(shared_registry).decode("utf-8"),
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 
 @router.get("/incidents")
@@ -40,4 +52,3 @@ def suggestions_latest() -> dict:
 def scan_now() -> dict[str, int]:
     count = app_state.scan_logs_once()
     return {"detected_incidents": count}
-
