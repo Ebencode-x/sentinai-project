@@ -44,3 +44,7 @@ class RemediationSuggestion(BaseModel):
         default=None,
         description="Unit-test hints to validate the patch before rollout.",
     )
+    pr_url: str | None = Field(
+        default=None,
+        description="GitHub PR URL opened by SentinAI for this suggestion.",
+    )
