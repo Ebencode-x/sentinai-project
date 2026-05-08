@@ -3,9 +3,9 @@
 > **Detects production failures. Calls an LLM. Fires a Slack alert with a proposed code patch — before your on-call engineer opens their laptop.**
 
 [![CI](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml/badge.svg)](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-51%20passing-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![Python](https://img.shields.io/badge/python-3.11-blue)](https://python.org)
+[![Tests](https://img.shields.io/badge/tests-60%20passing-brightgreen)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ---
 
@@ -17,7 +17,7 @@ SentinAI watches your application logs in real time. The moment it sees an error
 2. Sends it to an LLM (OpenAI or Claude) for analysis
 3. Gets back a structured remediation plan — summary, code fix, config change, confidence score, risks, a concrete patch, and unit-test guidance
 4. Fires a rich Slack alert and/or a generic webhook payload your existing tools can consume
-5. Exposes everything over a REST API with live observability metrics
+5. Exposes everything over a REST API with live observability metrics — including a Prometheus `/metrics` endpoint ready for Grafana
 
 No manual triage. No copy-pasting stack traces into ChatGPT. No missed alerts at 3 AM.
 
@@ -54,6 +54,7 @@ No manual triage. No copy-pasting stack traces into ChatGPT. No missed alerts at
 │                                                          │
 │  REST API: /health /stats /incidents /suggestions        │
 │  MetricsCollector: p95 latency · fallback_rate           │
+│  Prometheus: GET /metrics  (Grafana-ready)               │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -62,9 +63,11 @@ No manual triage. No copy-pasting stack traces into ChatGPT. No missed alerts at
 ## Features
 
 ### Real-Time Log Detection
+
 Tails `logs/app.log` continuously with a poll-and-seek strategy. Detects `ERROR`, `EXCEPTION`, `Traceback`, and `500` signals. Aggregates multiline Python stack traces into a single structured incident automatically.
 
 ### Structured LLM Analysis
+
 Every incident is sent to the configured LLM provider. The response is validated against a strict Pydantic schema — no fragile string parsing, no silent failures. The schema enforces:
 
 ```json
@@ -82,6 +85,7 @@ Every incident is sent to the configured LLM provider. The response is validated
 If the LLM returns malformed output, a 3-stage fallback chain handles it: JSON parse → section parser → stub summary. The API never returns empty.
 
 ### Smart Notifications
+
 Routing is severity-aware — not every alert fires everywhere:
 
 | Severity | Slack | Generic Webhook |
@@ -93,38 +97,10 @@ Routing is severity-aware — not every alert fires everywhere:
 
 Slack alerts use Block Kit — the same format Datadog and Linear use. Each alert includes the incident ID, trigger line, LLM summary, proposed fix, a visual confidence bar, and a patch preview.
 
-Example Slack alert payload structure:
-```
-🔴 CRITICAL — SentinAI Alert
-────────────────────────────
-Incident ID   | a3f9c2d1b8e04f12
-Detected      | 2026-05-06 12:00:00 UTC
-Trigger       | ERROR unhandled exception in handler
-LLM Source    | provider
-
-Summary
-Unhandled exception in request handler.
-
-Proposed Fix
-Wrap handler in try/except and return HTTP 500.
-
-Confidence   ████████░░ 80%
-Risks        Ensure catch block does not swallow critical errors.
-
-Patch Preview
-try:
-    process()
-except Exception as e:
-    raise HTTPException(500)
-
-🧪 Test guidance: 1. Mock process() to raise. 2. Assert HTTP 500 returned.
-────────────────────────────
-Sent by SentinAI · Self-Healing DevOps Agent
-```
-
 The generic webhook fires a structured JSON payload consumable by PagerDuty, n8n, Zapier, Linear, or any HTTP-capable tool — no custom parser needed.
 
 ### Observability Metrics
+
 `GET /stats` returns live runtime metrics:
 
 ```json
@@ -150,10 +126,40 @@ The generic webhook fires a structured JSON payload consumable by PagerDuty, n8n
 }
 ```
 
+### Prometheus Metrics Endpoint
+
+`GET /metrics` exposes the same data in Prometheus text exposition format — ready to scrape with Prometheus and visualize in Grafana:
+
+```
+# HELP sentinai_llm_requests_total Total LLM requests made
+# TYPE sentinai_llm_requests_total counter
+sentinai_llm_requests_total 12.0
+
+# HELP sentinai_llm_fallbacks_total Total LLM fallback responses
+# TYPE sentinai_llm_fallbacks_total counter
+sentinai_llm_fallbacks_total 1.0
+
+# HELP sentinai_llm_latency_p95_ms 95th percentile LLM latency in milliseconds
+# TYPE sentinai_llm_latency_p95_ms gauge
+sentinai_llm_latency_p95_ms 2180.0
+
+# HELP sentinai_llm_latency_p99_ms 99th percentile LLM latency in milliseconds
+# TYPE sentinai_llm_latency_p99_ms gauge
+sentinai_llm_latency_p99_ms 2340.0
+
+# HELP sentinai_fallback_rate Current LLM fallback rate (0.0–1.0)
+# TYPE sentinai_fallback_rate gauge
+sentinai_fallback_rate 0.0833
+```
+
+Add SentinAI as a Prometheus scrape target and you get latency trends, fallback spikes, and request volume in Grafana with zero additional instrumentation.
+
 ### Incident Deduplication
+
 Incidents are fingerprinted with SHA-256. Repeated log lines are skipped within a configurable sliding window (`INCIDENT_DEDUPE_WINDOW`, default 200) so repeated failures don't spam your Slack channel.
 
 ### Provider Resilience
+
 All LLM HTTP calls retry transient errors (429, 5xx, timeouts) with exponential backoff. If all retries fail, `RemediationEngine` returns a `fallback` suggestion with `provider_error` populated — the API never breaks, alerts still fire.
 
 ---
@@ -176,7 +182,7 @@ cp .env.example .env
 
 Edit `.env`:
 
-```bash
+```env
 # Use stub (no API key needed) or plug in a real provider
 LLM_PROVIDER=stub           # stub | openai | claude
 LLM_API_KEY=                # your OpenAI or Anthropic key
@@ -212,6 +218,9 @@ curl -X POST http://localhost:8000/scan-now
 
 # See what was detected
 curl http://localhost:8000/suggestions/latest | python -m json.tool
+
+# Scrape Prometheus metrics
+curl http://localhost:8000/metrics
 ```
 
 ---
@@ -232,6 +241,7 @@ Boots both services — SentinAI on `:8000`, vulnerable app on `:9000`.
 |---|---|---|
 | `GET` | `/health` | Service readiness check |
 | `GET` | `/stats` | Live runtime metrics — latency, fallback rate, scan counts |
+| `GET` | `/metrics` | Prometheus text exposition format — scrape with Prometheus/Grafana |
 | `GET` | `/incidents` | All detected incidents in the current buffer |
 | `GET` | `/suggestions` | All LLM suggestions in the current buffer |
 | `GET` | `/suggestions/latest` | Most recent suggestion (404 if none yet) |
@@ -245,14 +255,14 @@ Boots both services — SentinAI on `:8000`, vulnerable app on `:9000`.
 sentinai-project/
 ├── src/
 │   ├── api/
-│   │   └── routes.py              # FastAPI route handlers
+│   │   └── routes.py              # FastAPI route handlers (incl. /metrics)
 │   ├── core/
 │   │   ├── config.py              # Environment-backed settings
-│   │   ├── metrics.py             # Thread-safe MetricsCollector (M4)
+│   │   ├── metrics.py             # Thread-safe MetricsCollector + Prometheus instruments
 │   │   └── state.py               # Shared runtime state + scan loop
 │   ├── integrations/
 │   │   ├── llm_client.py          # LLM adapters + 3-stage fallback parser
-│   │   └── notifier.py            # Slack Block Kit + generic webhook (M3)
+│   │   └── notifier.py            # Slack Block Kit + generic webhook
 │   ├── models/
 │   │   └── events.py              # LogIncident + RemediationSuggestion
 │   ├── services/
@@ -261,7 +271,8 @@ sentinai-project/
 │   └── main.py
 ├── tests/
 │   ├── test_watcher.py                       # M1 + M2: 19 tests
-│   └── test_notifications_and_metrics.py     # M3 + M4: 32 tests
+│   ├── test_notifications_and_metrics.py     # M3 + M4: 32 tests
+│   └── test_prometheus_metrics.py            # M5: 9 tests
 ├── vulnerable-app/
 │   └── app.py                     # Intentional error generator
 ├── Dockerfile
@@ -275,17 +286,16 @@ sentinai-project/
 ## Test Suite
 
 ```bash
-pytest -v
-```
+pytest -q
 
-```
-51 passed in 0.73s
+60 passed in 0.81s
 ```
 
 | Module | Tests | Covers |
 |---|---|---|
 | `test_watcher.py` | 19 | Fence stripping, JSON parse, Pydantic validation, fallback chain, stub client, patch/guidance fields |
 | `test_notifications_and_metrics.py` | 32 | MetricsCollector math, thread safety, notify routing, Slack Block Kit structure, webhook payload, HTTP mocking, error resilience |
+| `test_prometheus_metrics.py` | 9 | Prometheus registry isolation, counter/gauge accuracy, `/metrics` response format, content-type header, zero-state output |
 
 ---
 
@@ -315,7 +325,8 @@ pytest -v
 | 2 | `proposed_patch` and `test_guidance` fields in LLM schema and stub | ✅ Complete |
 | 3 | Slack Block Kit alerts + generic HTTP webhook with severity routing | ✅ Complete |
 | 4 | `MetricsCollector` — p95/p99 latency, fallback rate, live `/stats` | ✅ Complete |
-| 5 | Prometheus `/metrics` endpoint for Grafana integration | 🔜 Next |
+| 5 | Prometheus `/metrics` endpoint for Grafana integration | ✅ Complete |
+| 6 | Auto-patch workflow — human-approved patch application via PR | 🔜 Planned |
 
 ---
 
@@ -330,7 +341,8 @@ pytest -v
 
 ## Built By
 
-**Ebenezer** · ICT Student, Mbeya University of Science and Technology  
+**Ebenezer** · ICT Student, Mbeya University of Science and Technology
+
 [![GitHub](https://img.shields.io/badge/GitHub-Ebencode--x-181717?logo=github)](https://github.com/Ebencode-x)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?logo=linkedin)](https://linkedin.com/in/ebenezer)
 [![Credly](https://img.shields.io/badge/Credly-Certifications-FF6B00?logo=credly)](https://credly.com/users/ebenezer)
