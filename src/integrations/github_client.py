@@ -1,4 +1,4 @@
-"""GitHub integration — opens auto-patch pull requests for SentinAI incidents."""
+"""GitHub integration -- opens auto-patch pull requests for SentinAI incidents."""
 from __future__ import annotations
 import logging
 from datetime import datetime, timezone
@@ -23,11 +23,8 @@ class GitHubClient:
         proposed_patch: str,
         test_guidance: str,
         confidence: float,
-    ) -> str | None:
-        """
-        Create a branch and open a pull request with the proposed patch.
-        Returns the PR URL on success, None on failure.
-        """
+    ) -> "str | None":
+        """Create a branch and open a PR. Returns PR URL on success, None on failure."""
         branch_name = f"sentinai/fix-{incident_id[:8]}"
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -82,62 +79,40 @@ class GitHubClient:
         confidence_pct = int(confidence * 100)
         bar_filled = int(confidence_pct / 10)
         bar = "[" + "#" * bar_filled + "-" * (10 - bar_filled) + "]"
-
-        return (
-            "## SentinAI -- Auto-Patch Proposal
-
-"
-            "| Field | Value |
-"
-            "|---|---|
-"
-            f"| Incident ID | `{incident_id}` |
-"
-            f"| Detected | {timestamp} |
-"
-            f"| Trigger | `{trigger_line[:120]}` |
-"
-            f"| Confidence | {bar} {confidence_pct}% |
-
-"
-            "---
-
-"
-            "### Summary
-
-"
-            f"{summary}
-
-"
-            "---
-
-"
-            "### Proposed Patch
-
-"
-            "```python
-"
-            f"{proposed_patch}
-"
-            "```
-
-"
-            "---
-
-"
-            "### Test Guidance
-
-"
-            f"{test_guidance}
-
-"
-            "---
-
-"
-            "> This PR was opened automatically by SentinAI.
-"
-            "> Review the patch, apply manually if appropriate, then merge or close.
-"
-            "> Never merge without human review.
-"
-        )
+        parts = [
+            "## SentinAI -- Auto-Patch Proposal",
+            "",
+            "| Field | Value |",
+            "|---|---|",
+            f"| Incident ID | `{incident_id}` |",
+            f"| Detected | {timestamp} |",
+            f"| Trigger | `{trigger_line[:120]}` |",
+            f"| Confidence | {bar} {confidence_pct}% |",
+            "",
+            "---",
+            "",
+            "### Summary",
+            "",
+            f"{summary}",
+            "",
+            "---",
+            "",
+            "### Proposed Patch",
+            "",
+            "```python",
+            f"{proposed_patch}",
+            "```",
+            "",
+            "---",
+            "",
+            "### Test Guidance",
+            "",
+            f"{test_guidance}",
+            "",
+            "---",
+            "",
+            "> This PR was opened automatically by SentinAI.",
+            "> Review the patch, apply manually if appropriate, then merge or close.",
+            "> Never merge without human review.",
+        ]
+        return "\n".join(parts) + "\n"
