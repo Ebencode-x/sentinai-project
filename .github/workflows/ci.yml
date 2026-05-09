@@ -39,7 +39,7 @@ jobs:
       - name: Run test suite with coverage
         run: |
           pytest tests/ -v \
-            --cov=sentinai \
+            --cov=. \
             --cov-report=term-missing \
             --cov-report=xml \
             --cov-fail-under=75
