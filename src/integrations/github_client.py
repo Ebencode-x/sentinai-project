@@ -1,4 +1,5 @@
 """GitHub integration -- opens auto-patch pull requests for SentinAI incidents."""
+
 from __future__ import annotations
 import logging
 from datetime import datetime, timezone
@@ -138,7 +139,8 @@ class GitHubClient:
                 new_lines = [
                     line.value
                     for line in hunk
-                    if line.line_type in (unidiff.LINE_TYPE_ADDED, unidiff.LINE_TYPE_CONTEXT)
+                    if line.line_type
+                    in (unidiff.LINE_TYPE_ADDED, unidiff.LINE_TYPE_CONTEXT)
                 ]
                 lines[start : start + length] = new_lines
         return "".join(lines)

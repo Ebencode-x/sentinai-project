@@ -44,7 +44,10 @@ def suggestions() -> list[dict]:
 @router.get("/suggestions/latest")
 def suggestions_latest() -> dict:
     if not app_state.recent_suggestions:
-        raise HTTPException(status_code=404, detail="No suggestions yet. Run POST /scan-now after errors appear in logs.")
+        raise HTTPException(
+            status_code=404,
+            detail="No suggestions yet. Run POST /scan-now after errors appear in logs.",
+        )
     return app_state.recent_suggestions[-1].model_dump(mode="json")
 
 

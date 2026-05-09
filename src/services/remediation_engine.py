@@ -21,7 +21,9 @@ class RemediationEngine:
     def __init__(self, llm_client: BaseLLMClient | None = None) -> None:
         self._llm_client = llm_client or build_llm_client()
         self._stub = StubLLMClient()
-        self._github = GitHubClient() if settings.github_token and settings.github_repo else None
+        self._github = (
+            GitHubClient() if settings.github_token and settings.github_repo else None
+        )
 
     def suggest_fix(self, incident: LogIncident) -> RemediationSuggestion:
         """Ask the configured LLM client for remediation guidance."""
@@ -30,7 +32,9 @@ class RemediationEngine:
         try:
             suggestion = self._llm_client.analyze_incident(incident)
         except Exception as exc:
-            logger.warning("LLM analysis failed; returning stub-based fallback: %s", exc)
+            logger.warning(
+                "LLM analysis failed; returning stub-based fallback: %s", exc
+            )
             base = self._stub.analyze_incident(incident)
             suggestion = base.model_copy(
                 update={
