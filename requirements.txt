@@ -7,3 +7,4 @@ pytest>=8.2.0
 
 prometheus-client>=0.20.0
 PyGithub>=2.3.0
+unidiff>=0.7.5

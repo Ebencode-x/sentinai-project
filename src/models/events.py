@@ -48,3 +48,7 @@ class RemediationSuggestion(BaseModel):
         default=None,
         description="GitHub PR URL opened by SentinAI for this suggestion.",
     )
+    patch_file: str | None = Field(
+        default=None,
+        description="Repo-relative path of the file patched in the auto-patch PR.",
+    )
