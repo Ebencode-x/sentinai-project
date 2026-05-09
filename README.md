@@ -1,3 +1,5 @@
+[![CI](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml/badge.svg)](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml)
+
 # SentinAI — Self-Healing DevOps Agent
 
 > **Detects production failures. Calls an LLM. Fires a Slack alert with a proposed code patch — before your on-call engineer opens their laptop.**
