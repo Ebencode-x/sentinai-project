@@ -10,6 +10,7 @@ from src.core.config import settings
 from src.integrations.llm_client import BaseLLMClient, StubLLMClient, build_llm_client
 from src.models.events import LogIncident, RemediationSuggestion
 from src.integrations.github_client import GitHubClient
+from src.integrations import notifier
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,11 @@ class RemediationEngine:
                     confidence=suggestion.confidence,
                 )
                 suggestion = suggestion.model_copy(update={"pr_url": pr_url})
+                if pr_url:
+                    try:
+                        notifier.notify(incident, suggestion)
+                    except Exception as slack_exc:
+                        logger.warning("Slack notification failed: %s", slack_exc)
             except Exception as exc:
                 logger.warning("GitHub PR creation failed: %s", exc)
         return suggestion

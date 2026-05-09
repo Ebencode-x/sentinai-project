@@ -123,6 +123,11 @@ def _build_slack_payload(incident: LogIncident, suggestion: RemediationSuggestio
     if suggestion.test_guidance:
         blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"🧪 *Test guidance:* {suggestion.test_guidance[:200]}"}]})
 
+    if suggestion.pr_url:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Auto-Patch PR*\n<{suggestion.pr_url}|View pull request on GitHub>"},
+        })
     blocks.append({"type": "divider"})
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": "Sent by *SentinAI* · Self-Healing DevOps Agent"}]})
 
