@@ -252,7 +252,7 @@ def test_remediation_engine_skips_notify_when_pr_url_is_none() -> None:
         mock_gh_cls.return_value = mock_github
 
         engine = RemediationEngine(llm_client=mock_llm)
-        result = engine.suggest_fix(incident)
+        _result = engine.suggest_fix(incident)
 
     mock_notifier.notify.assert_not_called()
 
