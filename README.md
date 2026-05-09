@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml/badge.svg)](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://python.org)
-[![Tests](https://img.shields.io/badge/tests-60%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-72%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ---
@@ -261,6 +261,7 @@ sentinai-project/
 │   │   ├── metrics.py             # Thread-safe MetricsCollector + Prometheus instruments
 │   │   └── state.py               # Shared runtime state + scan loop
 │   ├── integrations/
+│   │   ├── github_client.py       # Opens auto-patch PRs on GitHub (M6)
 │   │   ├── llm_client.py          # LLM adapters + 3-stage fallback parser
 │   │   └── notifier.py            # Slack Block Kit + generic webhook
 │   ├── models/
@@ -296,6 +297,7 @@ pytest -q
 | `test_watcher.py` | 19 | Fence stripping, JSON parse, Pydantic validation, fallback chain, stub client, patch/guidance fields |
 | `test_notifications_and_metrics.py` | 32 | MetricsCollector math, thread safety, notify routing, Slack Block Kit structure, webhook payload, HTTP mocking, error resilience |
 | `test_prometheus_metrics.py` | 9 | Prometheus registry isolation, counter/gauge accuracy, `/metrics` response format, content-type header, zero-state output |
+| `test_m6_auto_patch.py` | 12 | GitHubClient branch + PR creation, 422 branch-exists handling, Slack PR link block, RemediationEngine PR+Slack wiring |
 
 ---
 
@@ -326,7 +328,7 @@ pytest -q
 | 3 | Slack Block Kit alerts + generic HTTP webhook with severity routing | ✅ Complete |
 | 4 | `MetricsCollector` — p95/p99 latency, fallback rate, live `/stats` | ✅ Complete |
 | 5 | Prometheus `/metrics` endpoint for Grafana integration | ✅ Complete |
-| 6 | Auto-patch workflow — human-approved patch application via PR | 🔜 Planned |
+| 6 | Auto-patch PR workflow — GitHub branch + PR + Slack PR link notification | ✅ Complete |
 
 ---
 
