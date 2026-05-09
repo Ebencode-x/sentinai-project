@@ -45,6 +45,7 @@ VALID_JSON_RESPONSE = """{
   "config_change": "Set LOG_LEVEL=INFO in production.",
   "confidence": 0.85,
   "risks": "Ensure the catch block does not swallow critical errors silently.",
+    "patch_file": "src/services/handler.py",
   "proposed_patch": "try:\\n    process()\\nexcept Exception as e:\\n    raise HTTPException(500)",
   "test_guidance": "1. Mock process() to raise. 2. Assert HTTP 500 returned."
 }"""
@@ -207,6 +208,7 @@ def test_json_parse_includes_patch_and_guidance() -> None:
   "config_change": "Set LOG_LEVEL=INFO.",
   "confidence": 0.80,
   "risks": "Test in staging first.",
+    "patch_file": "src/services/handler.py",
   "proposed_patch": "try:\\n    process()\\nexcept Exception as e:\\n    raise HTTPException(500)",
   "test_guidance": "1. Mock process() to raise. 2. Assert 500 returned."
 }'''

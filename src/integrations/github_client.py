@@ -2,7 +2,9 @@
 from __future__ import annotations
 import logging
 from datetime import datetime, timezone
+import base64
 from github import Github, GithubException
+import unidiff
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,7 @@ class GitHubClient:
         proposed_patch: str,
         test_guidance: str,
         confidence: float,
+        patch_file: str | None = None,
     ) -> "str | None":
         """Create a branch and open a PR. Returns PR URL on success, None on failure."""
         branch_name = f"sentinai/fix-{incident_id[:8]}"
@@ -42,6 +45,15 @@ class GitHubClient:
             else:
                 logger.error("Failed to create branch: %s", exc)
                 return None
+
+        committed = self._commit_patch(
+            branch_name=branch_name,
+            proposed_patch=proposed_patch,
+            patch_file=patch_file,
+            incident_id=incident_id,
+        )
+        if not committed:
+            logger.warning("Patch commit skipped — PR will be description-only")
 
         pr_body = self._build_pr_body(
             incident_id=incident_id,
@@ -65,6 +77,71 @@ class GitHubClient:
         except GithubException as exc:
             logger.error("Failed to open PR: %s", exc)
             return None
+
+    def _commit_patch(
+        self,
+        branch_name: str,
+        proposed_patch: str,
+        patch_file: str | None,
+        incident_id: str,
+    ) -> bool:
+        """Parse unified diff, apply to live file, commit to branch. Returns True on success."""
+        if not proposed_patch or not patch_file:
+            logger.debug("No patch_file provided — skipping file commit")
+            return False
+        try:
+            patch_set = unidiff.PatchSet(proposed_patch)
+        except Exception as exc:
+            logger.warning("Failed to parse unified diff: %s", exc)
+            return False
+
+        try:
+            gh_file = self._repo.get_contents(patch_file, ref=branch_name)
+            original = base64.b64decode(gh_file.content).decode("utf-8")
+            file_sha = gh_file.sha
+        except GithubException as exc:
+            logger.warning("Could not fetch %s from GitHub: %s", patch_file, exc)
+            return False
+
+        try:
+            patched = self._apply_patch(original, patch_set)
+        except Exception as exc:
+            logger.warning("Patch application failed: %s", exc)
+            return False
+
+        if patched == original:
+            logger.info("Patch produced no changes — skipping commit")
+            return False
+
+        try:
+            self._repo.update_file(
+                path=patch_file,
+                message=f"[SentinAI] auto-patch for incident {incident_id[:8]}",
+                content=patched,
+                sha=file_sha,
+                branch=branch_name,
+            )
+            logger.info("Committed patch to %s on %s", patch_file, branch_name)
+            return True
+        except GithubException as exc:
+            logger.warning("Failed to commit patch: %s", exc)
+            return False
+
+    def _apply_patch(self, original: str, patch_set: "unidiff.PatchSet") -> str:
+        """Apply a parsed unidiff PatchSet to original file content."""
+        lines = original.splitlines(keepends=True)
+        # Work through hunks in reverse so line offsets stay valid
+        for patched_file in patch_set:
+            for hunk in reversed(list(patched_file)):
+                start = hunk.source_start - 1  # unidiff is 1-indexed
+                length = hunk.source_length
+                new_lines = [
+                    line.value
+                    for line in hunk
+                    if line.line_type in (unidiff.LINE_TYPE_ADDED, unidiff.LINE_TYPE_CONTEXT)
+                ]
+                lines[start : start + length] = new_lines
+        return "".join(lines)
 
     def _build_pr_body(
         self,

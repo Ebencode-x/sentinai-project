@@ -33,6 +33,7 @@ class _LLMJsonResponse(BaseModel):
     config_change: str = Field(..., min_length=1)
     confidence: float = Field(..., ge=0.0, le=1.0)
     risks: str = Field(..., min_length=1)
+    patch_file: str = Field(..., min_length=1)
     proposed_patch: str = Field(..., min_length=1)
     test_guidance: str = Field(..., min_length=1)
 
@@ -212,29 +213,35 @@ def _system_prompt() -> str:
 
 
 def _incident_prompt(incident: LogIncident) -> str:
-    return (
-        "Respond with ONLY a raw JSON object using exactly these keys:\n"
-        "{\n"
-        '  "summary": "one-line description of the failure",\n'
-        '  "code_fix": "description of the code change needed",\n'
-        '  "config_change": "description of any config tuning needed",\n'
-        '  "confidence": 0.0,\n'
-        '  "risks": "what could go wrong applying this fix",\n'
-        '  "proposed_patch": "concrete code snippet or unified diff showing the fix",\n'
-        '  "test_guidance": "numbered list of unit tests to write to validate the patch"\n'
-        "}\n\n"
-        "Rules:\n"
-        "- confidence must be a float between 0.0 and 1.0\n"
-        "- proposed_patch should be a real code snippet, not a description\n"
-        "- test_guidance should be a numbered list of specific test cases\n"
-        "- No markdown, no code fences, no text before or after the JSON\n"
-        "- Escape any double quotes inside string values with \\\"\n\n"
-        f"Incident ID: {incident.incident_id}\n"
-        f"Severity: {incident.severity}\n"
-        f"Trigger line: {incident.trigger_line}\n"
-        f"Context before error:\n{incident.context_before_error}\n\n"
-        f"Stacktrace:\n{incident.stacktrace}\n"
-    )
+    lines = [
+        "Respond with ONLY a raw JSON object using exactly these keys:",
+        "{",
+        '  "summary": "one-line description of the failure",',
+        '  "code_fix": "description of the code change needed",',
+        '  "config_change": "description of any config tuning needed",',
+        '  "confidence": 0.0,',
+        '  "risks": "what could go wrong applying this fix",',
+        '  "patch_file": "repo-relative path of the file to patch e.g. src/services/handler.py",',
+        '  "proposed_patch": "unified diff with --- a/file and +++ b/file headers showing the exact change",',
+        '  "test_guidance": "numbered list of unit tests to write to validate the patch"',
+        "}",
+        "",
+        "Rules:",
+        "- confidence must be a float between 0.0 and 1.0",
+        "- proposed_patch MUST be a valid unified diff starting with --- a/<file> and +++ b/<file>",
+        "- patch_file MUST be the repo-relative path matching the --- a/<file> header",
+        "- test_guidance should be a numbered list of specific test cases",
+        "- No markdown, no code fences, no text before or after the JSON",
+        '- Escape any double quotes inside string values with \\"',
+        "",
+        f"Incident ID: {incident.incident_id}",
+        f"Severity: {incident.severity}",
+        f"Trigger line: {incident.trigger_line}",
+        f"Context before error:\n{incident.context_before_error}",
+        "",
+        f"Stacktrace:\n{incident.stacktrace}",
+    ]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +319,7 @@ def _try_parse_json(
         risks=validated.risks,
         source=source,
         provider_error=None,
+        patch_file=validated.patch_file,
         proposed_patch=validated.proposed_patch,
         test_guidance=validated.test_guidance,
     )
