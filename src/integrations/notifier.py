@@ -52,14 +52,24 @@ def _send_slack(incident: LogIncident, suggestion: RemediationSuggestion) -> Non
         with httpx.Client(timeout=NOTIFICATION_TIMEOUT) as client:
             response = client.post(SLACK_WEBHOOK_URL, json=payload)
         if not response.is_success:
-            logger.warning("Slack notification failed [%s]: %s", response.status_code, response.text[:200])
+            logger.warning(
+                "Slack notification failed [%s]: %s",
+                response.status_code,
+                response.text[:200],
+            )
         else:
-            logger.debug("Slack notification sent for incident %s", incident.incident_id)
+            logger.debug(
+                "Slack notification sent for incident %s", incident.incident_id
+            )
     except Exception as exc:
-        logger.warning("Slack notification error for incident %s: %s", incident.incident_id, exc)
+        logger.warning(
+            "Slack notification error for incident %s: %s", incident.incident_id, exc
+        )
 
 
-def _build_slack_payload(incident: LogIncident, suggestion: RemediationSuggestion) -> dict[str, Any]:
+def _build_slack_payload(
+    incident: LogIncident, suggestion: RemediationSuggestion
+) -> dict[str, Any]:
     severity_emoji = "🔴" if incident.severity == "critical" else "🟡"
     severity_label = incident.severity.upper()
 
@@ -85,19 +95,32 @@ def _build_slack_payload(incident: LogIncident, suggestion: RemediationSuggestio
     blocks: list[dict] = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"{severity_emoji} {severity_label} — SentinAI Alert", "emoji": True},
+            "text": {
+                "type": "plain_text",
+                "text": f"{severity_emoji} {severity_label} — SentinAI Alert",
+                "emoji": True,
+            },
         },
         {
             "type": "section",
             "fields": [
                 {"type": "mrkdwn", "text": f"*Incident ID*\n`{incident.incident_id}`"},
-                {"type": "mrkdwn", "text": f"*Detected*\n{incident.detected_at_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC"},
-                {"type": "mrkdwn", "text": f"*Trigger*\n```{incident.trigger_line[:120]}```"},
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Detected*\n{incident.detected_at_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Trigger*\n```{incident.trigger_line[:120]}```",
+                },
                 {"type": "mrkdwn", "text": f"*LLM Source*\n`{suggestion.source}`"},
             ],
         },
         {"type": "divider"},
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"*Summary*\n{suggestion.summary}"}},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Summary*\n{suggestion.summary}"},
+        },
         {
             "type": "section",
             "text": {
@@ -115,41 +138,93 @@ def _build_slack_payload(incident: LogIncident, suggestion: RemediationSuggestio
     ]
 
     if flags:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(flags)}})
+        blocks.append(
+            {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(flags)}}
+        )
 
     if patch_preview:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*Patch Preview*\n```{patch_preview}```"}})
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Patch Preview*\n```{patch_preview}```",
+                },
+            }
+        )
 
     if suggestion.test_guidance:
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"🧪 *Test guidance:* {suggestion.test_guidance[:200]}"}]})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"🧪 *Test guidance:* {suggestion.test_guidance[:200]}",
+                    }
+                ],
+            }
+        )
 
     if suggestion.pr_url:
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*Auto-Patch PR*\n<{suggestion.pr_url}|View pull request on GitHub>"},
-        })
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Auto-Patch PR*\n<{suggestion.pr_url}|View pull request on GitHub>",
+                },
+            }
+        )
     blocks.append({"type": "divider"})
-    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": "Sent by *SentinAI* · Self-Healing DevOps Agent"}]})
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "Sent by *SentinAI* · Self-Healing DevOps Agent",
+                }
+            ],
+        }
+    )
 
     return {"blocks": blocks}
 
 
-def _send_generic_webhook(incident: LogIncident, suggestion: RemediationSuggestion) -> None:
+def _send_generic_webhook(
+    incident: LogIncident, suggestion: RemediationSuggestion
+) -> None:
     if not GENERIC_WEBHOOK_URL:
         return
     payload = _build_generic_payload(incident, suggestion)
     try:
         with httpx.Client(timeout=NOTIFICATION_TIMEOUT) as client:
-            response = client.post(GENERIC_WEBHOOK_URL, json=payload, headers={"Content-Type": "application/json", "User-Agent": "SentinAI/1.0"})
+            response = client.post(
+                GENERIC_WEBHOOK_URL,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "SentinAI/1.0",
+                },
+            )
         if not response.is_success:
-            logger.warning("Generic webhook failed [%s]: %s", response.status_code, response.text[:200])
+            logger.warning(
+                "Generic webhook failed [%s]: %s",
+                response.status_code,
+                response.text[:200],
+            )
         else:
             logger.debug("Generic webhook sent for incident %s", incident.incident_id)
     except Exception as exc:
-        logger.warning("Generic webhook error for incident %s: %s", incident.incident_id, exc)
+        logger.warning(
+            "Generic webhook error for incident %s: %s", incident.incident_id, exc
+        )
 
 
-def _build_generic_payload(incident: LogIncident, suggestion: RemediationSuggestion) -> dict[str, Any]:
+def _build_generic_payload(
+    incident: LogIncident, suggestion: RemediationSuggestion
+) -> dict[str, Any]:
     flags: list[str] = []
     if suggestion.confidence < 0.5:
         flags.append("low_confidence")

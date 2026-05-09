@@ -30,6 +30,7 @@ from src.models.events import LogIncident, RemediationSuggestion
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_incident(severity: str = "critical") -> LogIncident:
     return LogIncident(
         incident_id="test-fingerprint-01",
@@ -62,6 +63,7 @@ def _make_suggestion(
 # ---------------------------------------------------------------------------
 # Milestone 4 -- MetricsCollector
 # ---------------------------------------------------------------------------
+
 
 def test_metrics_empty_snapshot_returns_none_latencies() -> None:
     m = MetricsCollector()
@@ -133,6 +135,7 @@ def test_metrics_snapshot_sample_count_matches_records() -> None:
 
 def test_metrics_thread_safe_no_exception_on_concurrent_writes() -> None:
     import threading
+
     m = MetricsCollector()
     errors: list[Exception] = []
 
@@ -157,11 +160,14 @@ def test_metrics_thread_safe_no_exception_on_concurrent_writes() -> None:
 # Milestone 3 -- notify() routing
 # ---------------------------------------------------------------------------
 
+
 def test_notify_critical_calls_both_channels() -> None:
     incident = _make_incident(severity="critical")
     suggestion = _make_suggestion()
-    with patch("src.integrations.notifier._send_slack") as mock_slack, \
-         patch("src.integrations.notifier._send_generic_webhook") as mock_webhook:
+    with (
+        patch("src.integrations.notifier._send_slack") as mock_slack,
+        patch("src.integrations.notifier._send_generic_webhook") as mock_webhook,
+    ):
         notify(incident, suggestion)
     mock_slack.assert_called_once_with(incident, suggestion)
     mock_webhook.assert_called_once_with(incident, suggestion)
@@ -170,8 +176,10 @@ def test_notify_critical_calls_both_channels() -> None:
 def test_notify_warning_calls_slack_only() -> None:
     incident = _make_incident(severity="warning")
     suggestion = _make_suggestion()
-    with patch("src.integrations.notifier._send_slack") as mock_slack, \
-         patch("src.integrations.notifier._send_generic_webhook") as mock_webhook:
+    with (
+        patch("src.integrations.notifier._send_slack") as mock_slack,
+        patch("src.integrations.notifier._send_generic_webhook") as mock_webhook,
+    ):
         notify(incident, suggestion)
     mock_slack.assert_called_once_with(incident, suggestion)
     mock_webhook.assert_not_called()
@@ -181,16 +189,21 @@ def test_notify_warning_calls_slack_only() -> None:
 # Milestone 3 -- silence when env vars not set
 # ---------------------------------------------------------------------------
 
+
 def test_send_slack_does_nothing_when_url_not_set() -> None:
-    with patch("src.integrations.notifier.SLACK_WEBHOOK_URL", ""), \
-         patch("src.integrations.notifier.httpx") as mock_httpx:
+    with (
+        patch("src.integrations.notifier.SLACK_WEBHOOK_URL", ""),
+        patch("src.integrations.notifier.httpx") as mock_httpx,
+    ):
         _send_slack(_make_incident(), _make_suggestion())
     mock_httpx.Client.assert_not_called()
 
 
 def test_send_generic_webhook_does_nothing_when_url_not_set() -> None:
-    with patch("src.integrations.notifier.GENERIC_WEBHOOK_URL", ""), \
-         patch("src.integrations.notifier.httpx") as mock_httpx:
+    with (
+        patch("src.integrations.notifier.GENERIC_WEBHOOK_URL", ""),
+        patch("src.integrations.notifier.httpx") as mock_httpx,
+    ):
         _send_generic_webhook(_make_incident(), _make_suggestion())
     mock_httpx.Client.assert_not_called()
 
@@ -198,6 +211,7 @@ def test_send_generic_webhook_does_nothing_when_url_not_set() -> None:
 # ---------------------------------------------------------------------------
 # Milestone 3 -- Slack Block Kit payload structure
 # ---------------------------------------------------------------------------
+
 
 def test_slack_payload_has_blocks_key() -> None:
     payload = _build_slack_payload(_make_incident(), _make_suggestion())
@@ -207,14 +221,18 @@ def test_slack_payload_has_blocks_key() -> None:
 
 
 def test_slack_payload_header_contains_critical_label() -> None:
-    payload = _build_slack_payload(_make_incident(severity="critical"), _make_suggestion())
+    payload = _build_slack_payload(
+        _make_incident(severity="critical"), _make_suggestion()
+    )
     header = payload["blocks"][0]
     assert header["type"] == "header"
     assert "CRITICAL" in header["text"]["text"]
 
 
 def test_slack_payload_header_contains_warning_label() -> None:
-    payload = _build_slack_payload(_make_incident(severity="warning"), _make_suggestion())
+    payload = _build_slack_payload(
+        _make_incident(severity="warning"), _make_suggestion()
+    )
     header = payload["blocks"][0]
     assert "WARNING" in header["text"]["text"]
 
@@ -236,7 +254,9 @@ def test_slack_payload_normal_confidence_no_low_confidence_flag() -> None:
 
 
 def test_slack_payload_fallback_source_adds_degraded_flag() -> None:
-    payload = _build_slack_payload(_make_incident(), _make_suggestion(source="fallback"))
+    payload = _build_slack_payload(
+        _make_incident(), _make_suggestion(source="fallback")
+    )
     assert "Provider degraded" in str(payload)
 
 
@@ -257,6 +277,7 @@ def test_slack_payload_confidence_bar_length() -> None:
 # ---------------------------------------------------------------------------
 # Milestone 3 -- generic webhook payload structure
 # ---------------------------------------------------------------------------
+
 
 def test_generic_payload_event_field() -> None:
     payload = _build_generic_payload(_make_incident(), _make_suggestion())
@@ -291,12 +312,16 @@ def test_generic_payload_low_confidence_flag() -> None:
 
 
 def test_generic_payload_fallback_flag() -> None:
-    payload = _build_generic_payload(_make_incident(), _make_suggestion(source="fallback"))
+    payload = _build_generic_payload(
+        _make_incident(), _make_suggestion(source="fallback")
+    )
     assert "provider_degraded" in payload["flags"]
 
 
 def test_generic_payload_no_flags_for_healthy_suggestion() -> None:
-    payload = _build_generic_payload(_make_incident(), _make_suggestion(source="provider", confidence=0.85))
+    payload = _build_generic_payload(
+        _make_incident(), _make_suggestion(source="provider", confidence=0.85)
+    )
     assert payload["flags"] == []
 
 
@@ -311,11 +336,17 @@ def test_generic_payload_stacktrace_preview_truncated() -> None:
 # Milestone 3 -- HTTP call behaviour (mocked httpx)
 # ---------------------------------------------------------------------------
 
+
 def test_send_slack_posts_to_correct_url() -> None:
     mock_response = MagicMock()
     mock_response.is_success = True
-    with patch("src.integrations.notifier.SLACK_WEBHOOK_URL", "https://hooks.slack.com/test"), \
-         patch("src.integrations.notifier.httpx.Client") as mock_client_cls:
+    with (
+        patch(
+            "src.integrations.notifier.SLACK_WEBHOOK_URL",
+            "https://hooks.slack.com/test",
+        ),
+        patch("src.integrations.notifier.httpx.Client") as mock_client_cls,
+    ):
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
@@ -326,25 +357,41 @@ def test_send_slack_posts_to_correct_url() -> None:
     assert call_url == "https://hooks.slack.com/test"
 
 
-def test_send_slack_logs_warning_on_failure_status(caplog: pytest.LogCaptureFixture) -> None:
+def test_send_slack_logs_warning_on_failure_status(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     mock_response = MagicMock()
     mock_response.is_success = False
     mock_response.status_code = 400
     mock_response.text = "invalid_payload"
-    with patch("src.integrations.notifier.SLACK_WEBHOOK_URL", "https://hooks.slack.com/test"), \
-         patch("src.integrations.notifier.httpx.Client") as mock_client_cls:
+    with (
+        patch(
+            "src.integrations.notifier.SLACK_WEBHOOK_URL",
+            "https://hooks.slack.com/test",
+        ),
+        patch("src.integrations.notifier.httpx.Client") as mock_client_cls,
+    ):
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post.return_value = mock_response
         mock_client_cls.return_value = mock_client
         import logging
+
         with caplog.at_level(logging.WARNING, logger="src.integrations.notifier"):
             _send_slack(_make_incident(), _make_suggestion())
     assert any("Slack notification failed" in r.message for r in caplog.records)
 
 
 def test_send_slack_does_not_raise_on_exception() -> None:
-    with patch("src.integrations.notifier.SLACK_WEBHOOK_URL", "https://hooks.slack.com/test"), \
-         patch("src.integrations.notifier.httpx.Client", side_effect=Exception("network down")):
+    with (
+        patch(
+            "src.integrations.notifier.SLACK_WEBHOOK_URL",
+            "https://hooks.slack.com/test",
+        ),
+        patch(
+            "src.integrations.notifier.httpx.Client",
+            side_effect=Exception("network down"),
+        ),
+    ):
         _send_slack(_make_incident(), _make_suggestion())

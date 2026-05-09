@@ -18,11 +18,12 @@ class Settings:
     llm_model: str = os.getenv("LLM_MODEL", "")
     llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "25"))
     llm_max_retries: int = int(os.getenv("LLM_MAX_RETRIES", "3"))
-    llm_retry_backoff_seconds: float = float(os.getenv("LLM_RETRY_BACKOFF_SECONDS", "1.0"))
+    llm_retry_backoff_seconds: float = float(
+        os.getenv("LLM_RETRY_BACKOFF_SECONDS", "1.0")
+    )
     incident_dedupe_window: int = int(os.getenv("INCIDENT_DEDUPE_WINDOW", "200"))
     github_token: str = os.getenv("GITHUB_TOKEN", "")
     github_repo: str = os.getenv("GITHUB_REPO", "")
 
 
 settings = Settings()
-

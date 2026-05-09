@@ -36,4 +36,3 @@ def boom() -> dict[str, str]:
 
     logger.info("Request succeeded without crash")
     return {"status": "ok"}
-

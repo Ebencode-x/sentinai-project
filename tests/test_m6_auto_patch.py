@@ -24,6 +24,7 @@ from src.services.remediation_engine import RemediationEngine
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_incident() -> LogIncident:
     return LogIncident(
         incident_id="abcdef12-0000-0000-0000-000000000000",
@@ -35,7 +36,9 @@ def _make_incident() -> LogIncident:
     )
 
 
-def _make_suggestion(pr_url: str | None = None, proposed_patch: str | None = "x = 1") -> RemediationSuggestion:
+def _make_suggestion(
+    pr_url: str | None = None, proposed_patch: str | None = "x = 1"
+) -> RemediationSuggestion:
     return RemediationSuggestion(
         summary="Divide-by-zero in compute().",
         proposed_code_fix="Guard divisor with if check.",
@@ -49,7 +52,9 @@ def _make_suggestion(pr_url: str | None = None, proposed_patch: str | None = "x 
     )
 
 
-def _mock_github_client(pr_url: str = "https://github.com/org/repo/pull/42") -> MagicMock:
+def _mock_github_client(
+    pr_url: str = "https://github.com/org/repo/pull/42",
+) -> MagicMock:
     """Return a GitHubClient with all PyGithub internals mocked."""
     mock_repo = MagicMock()
     mock_repo.default_branch = "main"
@@ -63,8 +68,10 @@ def _mock_github_client(pr_url: str = "https://github.com/org/repo/pull/42") -> 
     mock_pr.html_url = pr_url
     mock_repo.create_pull.return_value = mock_pr
 
-    with patch("src.integrations.github_client.Github") as mock_gh_cls, \
-         patch("src.integrations.github_client.settings") as mock_settings:
+    with (
+        patch("src.integrations.github_client.Github") as mock_gh_cls,
+        patch("src.integrations.github_client.settings") as mock_settings,
+    ):
         mock_settings.github_token = "tok"
         mock_settings.github_repo = "org/repo"
         mock_gh_cls.return_value.get_repo.return_value = mock_repo
@@ -76,6 +83,7 @@ def _mock_github_client(pr_url: str = "https://github.com/org/repo/pull/42") -> 
 # ---------------------------------------------------------------------------
 # GitHubClient -- open_patch_pr success
 # ---------------------------------------------------------------------------
+
 
 def test_open_patch_pr_returns_pr_url() -> None:
     client = _mock_github_client()
@@ -137,7 +145,9 @@ def test_open_patch_pr_returns_none_on_branch_creation_error() -> None:
 
 def test_open_patch_pr_returns_none_on_pr_creation_error() -> None:
     client = _mock_github_client()
-    client._repo.create_pull.side_effect = GithubException(422, {"message": "PR already exists"}, {})
+    client._repo.create_pull.side_effect = GithubException(
+        422, {"message": "PR already exists"}, {}
+    )
     url = client.open_patch_pr(
         incident_id="abcdef12-xxxx",
         trigger_line="ERROR boom",
@@ -152,6 +162,7 @@ def test_open_patch_pr_returns_none_on_pr_creation_error() -> None:
 # ---------------------------------------------------------------------------
 # Slack payload -- PR link block
 # ---------------------------------------------------------------------------
+
 
 def test_slack_payload_includes_pr_link_when_pr_url_set() -> None:
     suggestion = _make_suggestion(pr_url="https://github.com/org/repo/pull/42")
@@ -178,7 +189,10 @@ def test_slack_payload_pr_link_is_slack_hyperlink_format() -> None:
 # RemediationEngine -- PR + Slack integration
 # ---------------------------------------------------------------------------
 
-def _make_llm_suggestion(proposed_patch: str | None = "fix = True") -> RemediationSuggestion:
+
+def _make_llm_suggestion(
+    proposed_patch: str | None = "fix = True",
+) -> RemediationSuggestion:
     return _make_suggestion(proposed_patch=proposed_patch)
 
 
@@ -189,10 +203,11 @@ def test_remediation_engine_calls_notify_after_pr_created() -> None:
     mock_llm = MagicMock()
     mock_llm.analyze_incident.return_value = llm_suggestion
 
-    with patch("src.services.remediation_engine.settings") as mock_settings, \
-         patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls, \
-         patch("src.services.remediation_engine.notifier") as mock_notifier:
-
+    with (
+        patch("src.services.remediation_engine.settings") as mock_settings,
+        patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls,
+        patch("src.services.remediation_engine.notifier") as mock_notifier,
+    ):
         mock_settings.github_token = "tok"
         mock_settings.github_repo = "org/repo"
 
@@ -214,10 +229,11 @@ def test_remediation_engine_skips_pr_when_no_proposed_patch() -> None:
     mock_llm = MagicMock()
     mock_llm.analyze_incident.return_value = llm_suggestion
 
-    with patch("src.services.remediation_engine.settings") as mock_settings, \
-         patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls, \
-         patch("src.services.remediation_engine.notifier") as mock_notifier:
-
+    with (
+        patch("src.services.remediation_engine.settings") as mock_settings,
+        patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls,
+        patch("src.services.remediation_engine.notifier") as mock_notifier,
+    ):
         mock_settings.github_token = "tok"
         mock_settings.github_repo = "org/repo"
 
@@ -240,10 +256,11 @@ def test_remediation_engine_skips_notify_when_pr_url_is_none() -> None:
     mock_llm = MagicMock()
     mock_llm.analyze_incident.return_value = llm_suggestion
 
-    with patch("src.services.remediation_engine.settings") as mock_settings, \
-         patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls, \
-         patch("src.services.remediation_engine.notifier") as mock_notifier:
-
+    with (
+        patch("src.services.remediation_engine.settings") as mock_settings,
+        patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls,
+        patch("src.services.remediation_engine.notifier") as mock_notifier,
+    ):
         mock_settings.github_token = "tok"
         mock_settings.github_repo = "org/repo"
 
@@ -265,10 +282,11 @@ def test_remediation_engine_slack_failure_does_not_raise() -> None:
     mock_llm = MagicMock()
     mock_llm.analyze_incident.return_value = llm_suggestion
 
-    with patch("src.services.remediation_engine.settings") as mock_settings, \
-         patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls, \
-         patch("src.services.remediation_engine.notifier") as mock_notifier:
-
+    with (
+        patch("src.services.remediation_engine.settings") as mock_settings,
+        patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls,
+        patch("src.services.remediation_engine.notifier") as mock_notifier,
+    ):
         mock_settings.github_token = "tok"
         mock_settings.github_repo = "org/repo"
 

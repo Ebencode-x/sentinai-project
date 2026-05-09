@@ -1,4 +1,6 @@
-"""Runtime metrics collection for SentinAI observability (Milestone 4 + 5).
+import pathlib
+
+content = """\"\"\"Runtime metrics collection for SentinAI observability (Milestone 4 + 5).
 
 Milestone 4 - internal snapshot()
     Tracks LLM provider latency and suggestion outcomes so stats_snapshot()
@@ -10,7 +12,7 @@ Milestone 5 - Prometheus instruments
     tests can create isolated collectors without cross-contaminating the
     process-level default registry.  The module-level `metrics` singleton
     uses a shared registry that the /metrics route scrapes.
-"""
+\"\"\"
 
 from __future__ import annotations
 
@@ -22,16 +24,16 @@ from typing import Deque
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 _LATENCY_WINDOW = 200
+
+# Latency buckets in milliseconds: 50 ms to 10 s
 _LATENCY_BUCKETS = (50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000)
 
 
 @dataclass
 class MetricsCollector:
-    """Thread-safe collector for LLM call metrics."""
+    \"\"\"Thread-safe collector for LLM call metrics.\"\"\"
 
-    _lock: threading.Lock = field(
-        default_factory=threading.Lock, init=False, repr=False
-    )
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _latencies_ms: Deque[float] = field(
         default_factory=lambda: deque(maxlen=_LATENCY_WINDOW),
         init=False,
@@ -137,5 +139,12 @@ class MetricsCollector:
         }
 
 
+# ---------------------------------------------------------------------------
+# Module-level singleton
+# ---------------------------------------------------------------------------
 shared_registry = CollectorRegistry()
 metrics = MetricsCollector(registry=shared_registry)
+"""
+
+pathlib.Path("src/core/metrics.py").write_text(content)
+print("metrics.py written")

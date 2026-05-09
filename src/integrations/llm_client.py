@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # JSON schema model — matches what we ask the LLM to return.
 # ---------------------------------------------------------------------------
 
+
 class _LLMJsonResponse(BaseModel):
     """Expected JSON structure from the LLM. All fields required."""
 
@@ -42,6 +43,7 @@ class _LLMJsonResponse(BaseModel):
 # Abstract base
 # ---------------------------------------------------------------------------
 
+
 class BaseLLMClient(ABC):
     """Abstract interface for analyzing incidents with an LLM."""
 
@@ -54,6 +56,7 @@ class BaseLLMClient(ABC):
 # ---------------------------------------------------------------------------
 # Stub (local, no API key required)
 # ---------------------------------------------------------------------------
+
 
 class StubLLMClient(BaseLLMClient):
     """Safe local placeholder that mimics an AI response.
@@ -105,6 +108,7 @@ class StubLLMClient(BaseLLMClient):
 # OpenAI adapter
 # ---------------------------------------------------------------------------
 
+
 class OpenAILLMClient(BaseLLMClient):
     """OpenAI Chat Completions adapter with structured JSON output."""
 
@@ -138,6 +142,7 @@ class OpenAILLMClient(BaseLLMClient):
 # ---------------------------------------------------------------------------
 # Claude adapter
 # ---------------------------------------------------------------------------
+
 
 class ClaudeLLMClient(BaseLLMClient):
     """Anthropic Messages API adapter with structured JSON output."""
@@ -180,6 +185,7 @@ class ClaudeLLMClient(BaseLLMClient):
 # Factory
 # ---------------------------------------------------------------------------
 
+
 def build_llm_client() -> BaseLLMClient:
     """Choose concrete LLM client by environment configuration."""
     provider = settings.llm_provider.strip().lower()
@@ -202,6 +208,7 @@ def build_llm_client() -> BaseLLMClient:
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
+
 
 def _system_prompt() -> str:
     return (
@@ -247,6 +254,7 @@ def _incident_prompt(incident: LogIncident) -> str:
 # ---------------------------------------------------------------------------
 # Response parsing — JSON first, section parser fallback, stub last
 # ---------------------------------------------------------------------------
+
 
 def _parse_llm_output(
     text: str,
@@ -345,7 +353,9 @@ def _try_parse_sections(
     return RemediationSuggestion(
         summary=sections.get("SUMMARY", "No summary provided."),
         proposed_code_fix=sections.get("CODE_FIX", "No code fix proposed."),
-        proposed_config_change=sections.get("CONFIG_CHANGE", "No config change proposed."),
+        proposed_config_change=sections.get(
+            "CONFIG_CHANGE", "No config change proposed."
+        ),
         confidence=max(0.0, min(1.0, confidence_value)),
         risks=sections.get("RISKS", "No risks provided."),
         source=source,
@@ -358,6 +368,7 @@ def _try_parse_sections(
 # ---------------------------------------------------------------------------
 # HTTP helper
 # ---------------------------------------------------------------------------
+
 
 def _post_json_with_retry(
     *,
@@ -387,7 +398,12 @@ def _post_json_with_retry(
                 )
             else:
                 response.raise_for_status()
-        except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError, httpx.WriteError) as exc:
+        except (
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            httpx.ReadError,
+            httpx.WriteError,
+        ) as exc:
             last_error = exc
 
         if attempt < max_retries - 1:
@@ -413,7 +429,15 @@ def _is_retryable_http_status(status_code: int) -> bool:
 
 def _extract_sections(text: str) -> dict[str, str]:
     """Parse SECTION: style text into a dict. Returns empty dict on no match."""
-    keys = ("SUMMARY", "CODE_FIX", "CONFIG_CHANGE", "CONFIDENCE", "RISKS", "PROPOSED_PATCH", "TEST_GUIDANCE")
+    keys = (
+        "SUMMARY",
+        "CODE_FIX",
+        "CONFIG_CHANGE",
+        "CONFIDENCE",
+        "RISKS",
+        "PROPOSED_PATCH",
+        "TEST_GUIDANCE",
+    )
     output: dict[str, str] = {}
     current_key = ""
     current_lines: list[str] = []

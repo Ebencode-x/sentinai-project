@@ -78,7 +78,9 @@ class AppState:
             "dedupe_fingerprints_tracked": len(self._incident_dedupe),
             "dedupe_window_max": settings.incident_dedupe_window,
             "total_scan_runs": self.total_scan_runs,
-            "last_scan_at_utc": self.last_scan_at_utc.isoformat() if self.last_scan_at_utc else None,
+            "last_scan_at_utc": self.last_scan_at_utc.isoformat()
+            if self.last_scan_at_utc
+            else None,
             "last_scan_new_incidents": self.last_scan_new_incidents,
             "recent_suggestions_by_source": by_source,
             "llm_metrics": metrics.snapshot(),
