@@ -10,9 +10,8 @@ Coverage:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-import pytest
 from github import GithubException
 
 from src.integrations.github_client import GitHubClient

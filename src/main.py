@@ -1,20 +1,20 @@
 """FastAPI entrypoint for SentinAI."""
 
-from __future__ import annotations
 
-from pathlib import Path
 
-from dotenv import load_dotenv
 
 # Load `.env` from project root before any settings import (Git Bash / local runs).
-_env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(_env_path)
-
+from __future__ import annotations
+from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import FastAPI
-
 from src.api.routes import router
 from src.core.config import settings
 from src.core.state import app_state
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_env_path)
+
+
 
 app = FastAPI(
     title=settings.app_name,
