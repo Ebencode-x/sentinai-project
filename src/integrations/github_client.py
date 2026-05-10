@@ -1,11 +1,14 @@
 """GitHub integration -- opens auto-patch pull requests for SentinAI incidents."""
 
 from __future__ import annotations
-import logging
-from datetime import datetime, timezone
+
 import base64
-from github import Github, GithubException
+import logging
+from datetime import UTC, datetime
+
 import unidiff
+from github import Github, GithubException
+
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -27,10 +30,10 @@ class GitHubClient:
         test_guidance: str,
         confidence: float,
         patch_file: str | None = None,
-    ) -> "str | None":
+    ) -> str | None:
         """Create a branch and open a PR. Returns PR URL on success, None on failure."""
         branch_name = f"sentinai/fix-{incident_id[:8]}"
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         try:
             default_branch = self._repo.default_branch
@@ -128,7 +131,7 @@ class GitHubClient:
             logger.warning("Failed to commit patch: %s", exc)
             return False
 
-    def _apply_patch(self, original: str, patch_set: "unidiff.PatchSet") -> str:
+    def _apply_patch(self, original: str, patch_set: unidiff.PatchSet) -> str:
         """Apply a parsed unidiff PatchSet to original file content."""
         lines = original.splitlines(keepends=True)
         # Work through hunks in reverse so line offsets stay valid
@@ -139,8 +142,7 @@ class GitHubClient:
                 new_lines = [
                     line.value
                     for line in hunk
-                    if line.line_type
-                    in (unidiff.LINE_TYPE_ADDED, unidiff.LINE_TYPE_CONTEXT)
+                    if line.line_type in (unidiff.LINE_TYPE_ADDED, unidiff.LINE_TYPE_CONTEXT)
                 ]
                 lines[start : start + length] = new_lines
         return "".join(lines)

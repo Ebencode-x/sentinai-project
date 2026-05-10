@@ -9,7 +9,7 @@ Coverage:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from github import GithubException
@@ -19,7 +19,6 @@ from src.integrations.notifier import _build_slack_payload
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.remediation_engine import RemediationEngine
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -28,7 +27,7 @@ from src.services.remediation_engine import RemediationEngine
 def _make_incident() -> LogIncident:
     return LogIncident(
         incident_id="abcdef12-0000-0000-0000-000000000000",
-        detected_at_utc=datetime(2026, 5, 9, 10, 0, 0, tzinfo=timezone.utc),
+        detected_at_utc=datetime(2026, 5, 9, 10, 0, 0, tzinfo=UTC),
         severity="critical",
         trigger_line="ERROR division by zero in compute()",
         stacktrace="Traceback:\n  File main.py line 7\nZeroDivisionError: division by zero",

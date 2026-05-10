@@ -253,7 +253,11 @@ class TestScanOnce:
         assert len(watcher.scan_once()) == 2
 
     def test_aggregates_multiline_traceback(self, watcher, tmp_log):
-        content = 'Traceback (most recent call last):\n  File "app.py", line 10\n  ValueError: bad\nINFO next\n'
+        content = (
+            "Traceback (most recent call last):\n"
+            '  File "app.py", line 10\n'
+            "  ValueError: bad\nINFO next\n"
+        )
         tmp_log.write_text(content)
         watcher._file_position = 0
         incidents = watcher.scan_once()

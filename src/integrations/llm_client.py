@@ -68,7 +68,10 @@ class StubLLMClient(BaseLLMClient):
 
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:
         return RemediationSuggestion(
-            summary="Potential unhandled exception detected. Add guard clauses and improve error handling.",
+            summary=(
+                "Potential unhandled exception detected."
+                " Add guard clauses and improve error handling."
+            ),
             proposed_code_fix=(
                 "Wrap failing logic in try/except, validate nullable values before use, "
                 "and return controlled HTTP errors instead of raw tracebacks."
@@ -173,9 +176,7 @@ class ClaudeLLMClient(BaseLLMClient):
         )
 
         text_chunks = [
-            item.get("text", "")
-            for item in body.get("content", [])
-            if item.get("type") == "text"
+            item.get("text", "") for item in body.get("content", []) if item.get("type") == "text"
         ]
         raw_content = "\n".join(chunk for chunk in text_chunks if chunk.strip())
         return _parse_llm_output(raw_content, source="provider")
@@ -236,7 +237,8 @@ def _incident_prompt(incident: LogIncident) -> str:
         '  "confidence": 0.0,',
         '  "risks": "what could go wrong applying this fix",',
         '  "patch_file": "repo-relative path of the file to patch e.g. src/services/handler.py",',
-        '  "proposed_patch": "unified diff with --- a/file and +++ b/file headers showing the exact change",',
+        '  "proposed_patch": '
+        '    "unified diff with --- a/file and +++ b/file headers showing the exact change",',
         '  "test_guidance": "numbered list of unit tests to write to validate the patch"',
         "}",
         "",
@@ -360,9 +362,7 @@ def _try_parse_sections(
     return RemediationSuggestion(
         summary=sections.get("SUMMARY", "No summary provided."),
         proposed_code_fix=sections.get("CODE_FIX", "No code fix proposed."),
-        proposed_config_change=sections.get(
-            "CONFIG_CHANGE", "No config change proposed."
-        ),
+        proposed_config_change=sections.get("CONFIG_CHANGE", "No config change proposed."),
         confidence=max(0.0, min(1.0, confidence_value)),
         risks=sections.get("RISKS", "No risks provided."),
         source=source,

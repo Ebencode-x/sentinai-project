@@ -5,8 +5,7 @@ from __future__ import annotations
 import threading
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Deque
+from datetime import UTC, datetime
 
 from src.core.config import settings
 from src.core.metrics import metrics
@@ -26,10 +25,10 @@ class AppState:
         )
     )
     remediation_engine: RemediationEngine = field(default_factory=RemediationEngine)
-    recent_incidents: Deque[LogIncident] = field(
+    recent_incidents: deque[LogIncident] = field(
         default_factory=lambda: deque(maxlen=settings.max_recent_incidents)
     )
-    recent_suggestions: Deque[RemediationSuggestion] = field(
+    recent_suggestions: deque[RemediationSuggestion] = field(
         default_factory=lambda: deque(maxlen=settings.max_recent_incidents)
     )
     _incident_dedupe: OrderedDict[str, None] = field(default_factory=OrderedDict)
@@ -63,7 +62,7 @@ class AppState:
             added += 1
 
         self.total_scan_runs += 1
-        self.last_scan_at_utc = datetime.now(timezone.utc)
+        self.last_scan_at_utc = datetime.now(UTC)
         self.last_scan_new_incidents = added
         return added
 

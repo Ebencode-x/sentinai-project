@@ -2,11 +2,13 @@
 
 # Load `.env` from project root before any settings import (Git Bash / local runs).
 from __future__ import annotations
-from pathlib import Path
-from dotenv import load_dotenv
-from contextlib import asynccontextmanager
 
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
+
 from src.api.routes import router
 from src.core.config import settings
 from src.core.state import app_state
@@ -24,7 +26,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="Self-healing DevOps agent that watches logs and prepares AI remediation suggestions.",
+    description=(
+        "Self-healing DevOps agent that watches logs and prepares AI remediation suggestions."
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )

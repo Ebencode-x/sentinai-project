@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -15,7 +15,7 @@ from src.models.events import LogIncident, RemediationSuggestion
 def make_incident(incident_id="abc123"):
     return LogIncident(
         incident_id=incident_id,
-        detected_at_utc=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
+        detected_at_utc=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
         severity="critical",
         trigger_line="ERROR test failure",
         stacktrace="ERROR test failure",

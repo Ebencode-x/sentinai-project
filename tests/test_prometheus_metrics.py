@@ -75,10 +75,10 @@ class TestPrometheusInstruments:
 
 
 def test_metrics_route_returns_200_with_prometheus_content_type():
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
     from fastapi.responses import PlainTextResponse
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi.testclient import TestClient
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
     isolated_mc = _fresh()
     isolated_mc.record(latency_ms=250.0, source="provider")
