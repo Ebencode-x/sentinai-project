@@ -58,13 +58,9 @@ def _send_slack(incident: LogIncident, suggestion: RemediationSuggestion) -> Non
                 response.text[:200],
             )
         else:
-            logger.debug(
-                "Slack notification sent for incident %s", incident.incident_id
-            )
+            logger.debug("Slack notification sent for incident %s", incident.incident_id)
     except Exception as exc:
-        logger.warning(
-            "Slack notification error for incident %s: %s", incident.incident_id, exc
-        )
+        logger.warning("Slack notification error for incident %s: %s", incident.incident_id, exc)
 
 
 def _build_slack_payload(
@@ -107,7 +103,10 @@ def _build_slack_payload(
                 {"type": "mrkdwn", "text": f"*Incident ID*\n`{incident.incident_id}`"},
                 {
                     "type": "mrkdwn",
-                    "text": f"*Detected*\n{incident.detected_at_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+                    "text": (
+                        f"*Detected*\n"
+                        f"{incident.detected_at_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+                    ),
                 },
                 {
                     "type": "mrkdwn",
@@ -125,7 +124,10 @@ def _build_slack_payload(
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Proposed Fix*\n{suggestion.proposed_code_fix[:280]}{'…' if len(suggestion.proposed_code_fix) > 280 else ''}",
+                "text": (
+                    f"*Proposed Fix*\n{suggestion.proposed_code_fix[:280]}"
+                    f"{'…' if len(suggestion.proposed_code_fix) > 280 else ''}"
+                ),
             },
         },
         {
@@ -138,9 +140,7 @@ def _build_slack_payload(
     ]
 
     if flags:
-        blocks.append(
-            {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(flags)}}
-        )
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(flags)}})
 
     if patch_preview:
         blocks.append(
@@ -192,9 +192,7 @@ def _build_slack_payload(
     return {"blocks": blocks}
 
 
-def _send_generic_webhook(
-    incident: LogIncident, suggestion: RemediationSuggestion
-) -> None:
+def _send_generic_webhook(incident: LogIncident, suggestion: RemediationSuggestion) -> None:
     if not GENERIC_WEBHOOK_URL:
         return
     payload = _build_generic_payload(incident, suggestion)
@@ -217,9 +215,7 @@ def _send_generic_webhook(
         else:
             logger.debug("Generic webhook sent for incident %s", incident.incident_id)
     except Exception as exc:
-        logger.warning(
-            "Generic webhook error for incident %s: %s", incident.incident_id, exc
-        )
+        logger.warning("Generic webhook error for incident %s: %s", incident.incident_id, exc)
 
 
 def _build_generic_payload(

@@ -17,7 +17,6 @@ from __future__ import annotations
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
@@ -29,10 +28,8 @@ _LATENCY_BUCKETS = (50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000)
 class MetricsCollector:
     """Thread-safe collector for LLM call metrics."""
 
-    _lock: threading.Lock = field(
-        default_factory=threading.Lock, init=False, repr=False
-    )
-    _latencies_ms: Deque[float] = field(
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _latencies_ms: deque[float] = field(
         default_factory=lambda: deque(maxlen=_LATENCY_WINDOW),
         init=False,
         repr=False,
@@ -91,11 +88,7 @@ class MetricsCollector:
             self._prom_fallbacks.inc()
         if source in ("provider", "fallback"):
             self._prom_provider_calls.inc()
-        rate = (
-            self.total_fallbacks / self.total_suggestions
-            if self.total_suggestions
-            else 0.0
-        )
+        rate = self.total_fallbacks / self.total_suggestions if self.total_suggestions else 0.0
         self._prom_fallback_rate.set(rate)
 
     def snapshot(self) -> dict:

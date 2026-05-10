@@ -10,7 +10,7 @@ Coverage:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,7 +25,6 @@ from src.integrations.notifier import (
 )
 from src.models.events import LogIncident, RemediationSuggestion
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -34,10 +33,14 @@ from src.models.events import LogIncident, RemediationSuggestion
 def _make_incident(severity: str = "critical") -> LogIncident:
     return LogIncident(
         incident_id="test-fingerprint-01",
-        detected_at_utc=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+        detected_at_utc=datetime(2026, 5, 6, 12, 0, 0, tzinfo=UTC),
         severity=severity,
         trigger_line="ERROR unhandled exception in handler",
-        stacktrace="ERROR unhandled exception\nTraceback (most recent call last):\n  File app.py line 42",
+        stacktrace=(
+            "ERROR unhandled exception\n"
+            "Traceback (most recent call last):\n"
+            "  File app.py line 42"
+        ),
         context_before_error="INFO request received",
     )
 
@@ -221,18 +224,14 @@ def test_slack_payload_has_blocks_key() -> None:
 
 
 def test_slack_payload_header_contains_critical_label() -> None:
-    payload = _build_slack_payload(
-        _make_incident(severity="critical"), _make_suggestion()
-    )
+    payload = _build_slack_payload(_make_incident(severity="critical"), _make_suggestion())
     header = payload["blocks"][0]
     assert header["type"] == "header"
     assert "CRITICAL" in header["text"]["text"]
 
 
 def test_slack_payload_header_contains_warning_label() -> None:
-    payload = _build_slack_payload(
-        _make_incident(severity="warning"), _make_suggestion()
-    )
+    payload = _build_slack_payload(_make_incident(severity="warning"), _make_suggestion())
     header = payload["blocks"][0]
     assert "WARNING" in header["text"]["text"]
 
@@ -254,9 +253,7 @@ def test_slack_payload_normal_confidence_no_low_confidence_flag() -> None:
 
 
 def test_slack_payload_fallback_source_adds_degraded_flag() -> None:
-    payload = _build_slack_payload(
-        _make_incident(), _make_suggestion(source="fallback")
-    )
+    payload = _build_slack_payload(_make_incident(), _make_suggestion(source="fallback"))
     assert "Provider degraded" in str(payload)
 
 
@@ -312,9 +309,7 @@ def test_generic_payload_low_confidence_flag() -> None:
 
 
 def test_generic_payload_fallback_flag() -> None:
-    payload = _build_generic_payload(
-        _make_incident(), _make_suggestion(source="fallback")
-    )
+    payload = _build_generic_payload(_make_incident(), _make_suggestion(source="fallback"))
     assert "provider_degraded" in payload["flags"]
 
 

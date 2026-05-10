@@ -11,10 +11,10 @@ import hashlib
 import re
 import time
 from collections import deque
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Deque, Iterable, Iterator, Optional
 
 from src.models.events import LogIncident
 
@@ -50,9 +50,7 @@ class LogWatcher:
     STACKTRACE_CONTINUATION_PATTERNS = (
         re.compile(r"^\s+File\s+\".*\", line \d+"),  # Python traceback frames
         re.compile(r"^\s+[A-Za-z_][A-Za-z0-9_]*Error:"),  # Indented error summary lines
-        re.compile(
-            r"^[A-Za-z_][A-Za-z0-9_]*Error:.*"
-        ),  # Column-0 Python errors (common in logs)
+        re.compile(r"^[A-Za-z_][A-Za-z0-9_]*Error:.*"),  # Column-0 Python errors (common in logs)
         re.compile(r"^\s+at\s+"),  # Typical JS/TS stack trace lines
         re.compile(r"^\s+\.\.\."),  # Continuation marker
     )
@@ -60,9 +58,7 @@ class LogWatcher:
     def __init__(self, config: WatcherConfig) -> None:
         self.config = config
         self._log_path = Path(config.log_file_path)
-        self._context_buffer: Deque[str] = deque(
-            maxlen=config.context_lines_before_error
-        )
+        self._context_buffer: deque[str] = deque(maxlen=config.context_lines_before_error)
         self._file_position: int = 0
 
     def initialize_position(self, start_from_end: bool = True) -> None:
@@ -118,9 +114,7 @@ class LogWatcher:
 
         return incidents
 
-    def follow(
-        self, stop_after_iterations: Optional[int] = None
-    ) -> Iterator[LogIncident]:
+    def follow(self, stop_after_iterations: int | None = None) -> Iterator[LogIncident]:
         """Continuously tail logs and yield incidents as they appear.
 
         Args:
@@ -131,14 +125,10 @@ class LogWatcher:
         iterations = 0
 
         while True:
-            for incident in self.scan_once():
-                yield incident
+            yield from self.scan_once()
 
             iterations += 1
-            if (
-                stop_after_iterations is not None
-                and iterations >= stop_after_iterations
-            ):
+            if stop_after_iterations is not None and iterations >= stop_after_iterations:
                 break
 
             time.sleep(self.config.poll_interval_seconds)
@@ -187,7 +177,7 @@ class LogWatcher:
 
         return LogIncident(
             incident_id=fingerprint,
-            detected_at_utc=datetime.now(timezone.utc),
+            detected_at_utc=datetime.now(UTC),
             severity="critical",
             trigger_line=block_lines[0] if block_lines else "",
             stacktrace=merged_text,
@@ -204,9 +194,7 @@ class LogWatcher:
 
     def _looks_like_stacktrace_continuation(self, line: str) -> bool:
         """Heuristic to decide whether line belongs to the same stacktrace."""
-        return any(
-            pattern.search(line) for pattern in self.STACKTRACE_CONTINUATION_PATTERNS
-        )
+        return any(pattern.search(line) for pattern in self.STACKTRACE_CONTINUATION_PATTERNS)
 
     @staticmethod
     def _fingerprint(text: str) -> str:
