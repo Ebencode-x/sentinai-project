@@ -22,13 +22,10 @@ logger = logging.getLogger(__name__)
 _API_KEY_NAME = "X-API-Key"
 _api_key_header = APIKeyHeader(name=_API_KEY_NAME, auto_error=False)
 
-_CONFIGURED_KEY: str = os.getenv("SENTINAI_API_KEY", "")
 
-if not _CONFIGURED_KEY:
-    logger.warning(
-        "SENTINAI_API_KEY is not set — API is running without authentication. "
-        "Set this variable before any public or production deployment."
-    )
+def _get_configured_key() -> str:
+    """Read API key dynamically — picks up changes without server restart."""
+    return os.getenv("SENTINAI_API_KEY", "")
 
 
 async def require_api_key(key: str | None = Security(_api_key_header)) -> None:
@@ -37,7 +34,13 @@ async def require_api_key(key: str | None = Security(_api_key_header)) -> None:
     Skips auth when the key is not configured (local/demo mode).
     Returns 401 when key is missing, 403 when key is wrong.
     """
-    if not _CONFIGURED_KEY:
+    configured_key = _get_configured_key()
+
+    if not configured_key:
+        logger.warning(
+            "SENTINAI_API_KEY is not set — API is running without authentication. "
+            "Set this variable before any public or production deployment."
+        )
         return
 
     if key is None:
@@ -47,7 +50,7 @@ async def require_api_key(key: str | None = Security(_api_key_header)) -> None:
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
-    if not secrets.compare_digest(key, _CONFIGURED_KEY):
+    if not secrets.compare_digest(key, configured_key):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid API key.",
