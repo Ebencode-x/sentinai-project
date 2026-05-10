@@ -8,8 +8,6 @@ from fastapi.testclient import TestClient
 
 def _make_app(api_key: str):
     """Build a minimal FastAPI app with require_api_key wired, using a specific key."""
-    import importlib
-    import sys
 
     import src.api.security as sec_mod
 
