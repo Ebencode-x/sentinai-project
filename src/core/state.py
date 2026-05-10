@@ -67,29 +67,34 @@ class AppState:
         return added
 
     def stats_snapshot(self) -> dict:
-        """Lightweight runtime metrics for demos and observability export."""
-        by_source: dict[str, int] = {"stub": 0, "provider": 0, "fallback": 0}
-        for suggestion in self.recent_suggestions:
-            key = suggestion.source
-            if key in by_source:
-                by_source[key] += 1
+        """Lightweight runtime metrics for demos and observability export.
 
-        return {
-            "service": "sentinai",
-            "log_file_path": settings.log_file_path,
-            "llm_provider": settings.llm_provider,
-            "buffer_incident_count": len(self.recent_incidents),
-            "buffer_suggestion_count": len(self.recent_suggestions),
-            "dedupe_fingerprints_tracked": len(self._incident_dedupe),
-            "dedupe_window_max": settings.incident_dedupe_window,
-            "total_scan_runs": self.total_scan_runs,
-            "last_scan_at_utc": self.last_scan_at_utc.isoformat()
-            if self.last_scan_at_utc
-            else None,
-            "last_scan_new_incidents": self.last_scan_new_incidents,
-            "recent_suggestions_by_source": by_source,
-            "llm_metrics": metrics.snapshot(),
-        }
+        Acquires _scan_lock to ensure a consistent view of shared state
+        while scan_logs_once() may be running concurrently.
+        """
+        with self._scan_lock:
+            by_source: dict[str, int] = {"stub": 0, "provider": 0, "fallback": 0}
+            for suggestion in self.recent_suggestions:
+                key = suggestion.source
+                if key in by_source:
+                    by_source[key] += 1
+
+            return {
+                "service": "sentinai",
+                "log_file_path": settings.log_file_path,
+                "llm_provider": settings.llm_provider,
+                "buffer_incident_count": len(self.recent_incidents),
+                "buffer_suggestion_count": len(self.recent_suggestions),
+                "dedupe_fingerprints_tracked": len(self._incident_dedupe),
+                "dedupe_window_max": settings.incident_dedupe_window,
+                "total_scan_runs": self.total_scan_runs,
+                "last_scan_at_utc": self.last_scan_at_utc.isoformat()
+                if self.last_scan_at_utc
+                else None,
+                "last_scan_new_incidents": self.last_scan_new_incidents,
+                "recent_suggestions_by_source": by_source,
+                "llm_metrics": metrics.snapshot(),
+            }
 
 
 app_state = AppState()
