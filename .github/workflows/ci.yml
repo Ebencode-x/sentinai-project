@@ -42,7 +42,7 @@ jobs:
             --cov=src \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=54
+            --cov-fail-under=72
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -99,9 +99,9 @@ jobs:
 
       - name: Run bandit scan
         run: |
-          bandit -r sentinai/ \
+          bandit -r src/ \
             -ll \
-            --exclude sentinai/tests \
+            --exclude src/tests \
             -f json \
             -o bandit-report.json || true
 
