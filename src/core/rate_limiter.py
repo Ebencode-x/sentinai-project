@@ -2,6 +2,11 @@
 
 Prevents log storms from generating hundreds of LLM calls or PRs.
 Configurable via environment variables.
+
+Architecture:
+    RateLimiter (Protocol) — interface contract
+    TokenBucket            — in-memory implementation (current)
+    Future: RedisRateLimiter — distributed implementation (Phase 3)
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ import logging
 import os
 import threading
 import time
+from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +23,32 @@ _LLM_MAX_PER_MINUTE: int = int(os.getenv("SENTINAI_LLM_RATE_LIMIT", "10"))
 _PR_MAX_PER_MINUTE: int = int(os.getenv("SENTINAI_PR_RATE_LIMIT", "3"))
 
 
+@runtime_checkable
+class RateLimiter(Protocol):
+    """Interface contract for all rate limiter implementations.
+
+    Any class that implements consume() satisfies this protocol.
+    Swap TokenBucket for RedisRateLimiter in production without
+    changing any call sites.
+    """
+
+    def consume(self) -> bool:
+        """Attempt to consume one token.
+
+        Returns:
+            True  — request is allowed.
+            False — request is throttled; caller should reject or defer.
+        """
+        ...
+
+
 class TokenBucket:
     """Thread-safe token bucket rate limiter.
 
     Refills at a constant rate. Callers consume one token per action.
     Returns False immediately (non-blocking) when the bucket is empty.
+
+    Satisfies the RateLimiter protocol.
     """
 
     def __init__(self, capacity: int, refill_per_minute: int) -> None:
@@ -49,12 +76,14 @@ class TokenBucket:
             return False
 
 
-llm_rate_limiter = TokenBucket(
+# Global instances — both satisfy RateLimiter protocol.
+# Type annotations use RateLimiter so future swap requires zero call-site changes.
+llm_rate_limiter: RateLimiter = TokenBucket(
     capacity=_LLM_MAX_PER_MINUTE,
     refill_per_minute=_LLM_MAX_PER_MINUTE,
 )
 
-pr_rate_limiter = TokenBucket(
+pr_rate_limiter: RateLimiter = TokenBucket(
     capacity=_PR_MAX_PER_MINUTE,
     refill_per_minute=_PR_MAX_PER_MINUTE,
 )
