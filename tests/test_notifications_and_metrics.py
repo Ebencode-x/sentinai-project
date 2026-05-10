@@ -37,9 +37,7 @@ def _make_incident(severity: str = "critical") -> LogIncident:
         severity=severity,
         trigger_line="ERROR unhandled exception in handler",
         stacktrace=(
-            "ERROR unhandled exception\n"
-            "Traceback (most recent call last):\n"
-            "  File app.py line 42"
+            "ERROR unhandled exception\nTraceback (most recent call last):\n  File app.py line 42"
         ),
         context_before_error="INFO request received",
     )
