@@ -103,7 +103,7 @@ jobs:
             -ll \
             --exclude src/tests \
             -f json \
-            -o bandit-report.json || true
+            -o bandit-report.json
 
       - name: Upload bandit report
         uses: actions/upload-artifact@v4
