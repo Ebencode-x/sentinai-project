@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -32,11 +33,16 @@ class AppState:
         default_factory=lambda: deque(maxlen=settings.max_recent_incidents)
     )
     _incident_dedupe: OrderedDict[str, None] = field(default_factory=OrderedDict)
+    _scan_lock: threading.Lock = field(default_factory=threading.Lock)
     total_scan_runs: int = 0
     last_scan_at_utc: datetime | None = None
     last_scan_new_incidents: int = 0
 
     def scan_logs_once(self) -> int:
+        with self._scan_lock:
+            return self._do_scan()
+
+    def _do_scan(self) -> int:
         incidents = self.watcher.scan_once()
         added = 0
         for incident in incidents:

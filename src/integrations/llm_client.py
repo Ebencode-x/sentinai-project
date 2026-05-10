@@ -220,6 +220,13 @@ def _system_prompt() -> str:
 
 
 def _incident_prompt(incident: LogIncident) -> str:
+    from src.core.sanitizer import sanitize_incident_for_prompt
+
+    trigger, stacktrace, context = sanitize_incident_for_prompt(
+        incident.trigger_line,
+        incident.stacktrace,
+        incident.context_before_error,
+    )
     lines = [
         "Respond with ONLY a raw JSON object using exactly these keys:",
         "{",
@@ -243,10 +250,10 @@ def _incident_prompt(incident: LogIncident) -> str:
         "",
         f"Incident ID: {incident.incident_id}",
         f"Severity: {incident.severity}",
-        f"Trigger line: {incident.trigger_line}",
-        f"Context before error:\n{incident.context_before_error}",
+        f"Trigger line: {trigger}",
+        f"Context before error:\n{context}",
         "",
-        f"Stacktrace:\n{incident.stacktrace}",
+        f"Stacktrace:\n{stacktrace}",
     ]
     return "\n".join(lines)
 

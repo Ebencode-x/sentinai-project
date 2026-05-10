@@ -2,27 +2,31 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
+from src.api.security import require_api_key
 from src.core.metrics import shared_registry
 from src.core.state import app_state
 
 router = APIRouter()
 
+_PROTECTED = [Depends(require_api_key)]
+
 
 @router.get("/health")
 def health() -> dict[str, str]:
+    """Public — no auth required."""
     return {"status": "ok", "service": "sentinai"}
 
 
-@router.get("/stats")
+@router.get("/stats", dependencies=_PROTECTED)
 def stats() -> dict:
     return app_state.stats_snapshot()
 
 
-@router.get("/metrics", response_class=PlainTextResponse)
+@router.get("/metrics", response_class=PlainTextResponse, dependencies=_PROTECTED)
 def prometheus_metrics() -> PlainTextResponse:
     """Prometheus text exposition format - scrape with prometheus.yml."""
     return PlainTextResponse(
@@ -31,17 +35,17 @@ def prometheus_metrics() -> PlainTextResponse:
     )
 
 
-@router.get("/incidents")
+@router.get("/incidents", dependencies=_PROTECTED)
 def incidents() -> list[dict]:
     return [incident.model_dump(mode="json") for incident in app_state.recent_incidents]
 
 
-@router.get("/suggestions")
+@router.get("/suggestions", dependencies=_PROTECTED)
 def suggestions() -> list[dict]:
     return [item.model_dump(mode="json") for item in app_state.recent_suggestions]
 
 
-@router.get("/suggestions/latest")
+@router.get("/suggestions/latest", dependencies=_PROTECTED)
 def suggestions_latest() -> dict:
     if not app_state.recent_suggestions:
         raise HTTPException(
@@ -51,7 +55,7 @@ def suggestions_latest() -> dict:
     return app_state.recent_suggestions[-1].model_dump(mode="json")
 
 
-@router.post("/scan-now")
+@router.post("/scan-now", dependencies=_PROTECTED)
 def scan_now() -> dict[str, int]:
     count = app_state.scan_logs_once()
     return {"detected_incidents": count}

@@ -7,6 +7,7 @@ import time
 
 from src.core.metrics import metrics
 from src.core.config import settings
+from src.core.rate_limiter import llm_rate_limiter, pr_rate_limiter
 from src.integrations.llm_client import BaseLLMClient, StubLLMClient, build_llm_client
 from src.models.events import LogIncident, RemediationSuggestion
 from src.integrations.github_client import GitHubClient
@@ -27,6 +28,17 @@ class RemediationEngine:
 
     def suggest_fix(self, incident: LogIncident) -> RemediationSuggestion:
         """Ask the configured LLM client for remediation guidance."""
+        if not llm_rate_limiter.consume():
+            logger.warning("LLM rate limit exceeded — returning stub fallback.")
+            base = self._stub.analyze_incident(incident)
+            return base.model_copy(
+                update={
+                    "source": "fallback",
+                    "provider_error": "Rate limit: too many LLM calls per minute.",
+                    "confidence": 0.1,
+                }
+            )
+
         t0 = time.perf_counter()
         suggestion = None
         try:
@@ -49,6 +61,12 @@ class RemediationEngine:
             if suggestion is not None:
                 metrics.record(latency_ms=latency_ms, source=suggestion.source)
         if self._github is not None and suggestion.proposed_patch:
+            if not pr_rate_limiter.consume():
+                logger.warning(
+                    "PR rate limit exceeded — skipping GitHub PR for incident %s.",
+                    incident.incident_id,
+                )
+                return suggestion
             try:
                 pr_url = self._github.open_patch_pr(
                     incident_id=incident.incident_id,
