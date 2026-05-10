@@ -1,238 +1,298 @@
-"""Tests for Milestone 1: structured JSON LLM output and fallback chain.
-
-Coverage:
-- _strip_fences: markdown fence removal
-- _try_parse_json: valid JSON, invalid JSON, Pydantic validation failure
-- _try_parse_sections: legacy section format still works
-- _parse_llm_output: full fallback chain end-to-end
-- StubLLMClient: still returns a valid suggestion
-"""
-
+"""M8 tests for src/services/watcher.py."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import hashlib
+from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 
-from src.integrations.llm_client import (
-    StubLLMClient,
-    _parse_llm_output,
-    _strip_fences,
-    _try_parse_json,
-    _try_parse_sections,
-)
 from src.models.events import LogIncident
+from src.services.watcher import LogWatcher, WatcherConfig
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def tmp_log(tmp_path):
+    p = tmp_path / "app.log"
+    p.touch()
+    return p
 
 
-def _make_incident() -> LogIncident:
-    return LogIncident(
-        incident_id="abc123",
-        detected_at_utc=datetime.now(timezone.utc),
-        severity="critical",
-        trigger_line="ERROR something went wrong",
-        stacktrace="ERROR something went wrong\nTraceback...",
-        context_before_error="INFO app started",
-    )
+@pytest.fixture
+def watcher(tmp_log):
+    cfg = WatcherConfig(log_file_path=str(tmp_log))
+    w = LogWatcher(cfg)
+    w.initialize_position(start_from_end=False)
+    return w
 
 
-VALID_JSON_RESPONSE = """{
-  "summary": "Unhandled exception in request handler.",
-  "code_fix": "Wrap handler in try/except and return 500 with safe message.",
-  "config_change": "Set LOG_LEVEL=INFO in production.",
-  "confidence": 0.85,
-  "risks": "Ensure the catch block does not swallow critical errors silently.",
-    "patch_file": "src/services/handler.py",
-  "proposed_patch": "try:\\n    process()\\nexcept Exception as e:\\n    raise HTTPException(500)",
-  "test_guidance": "1. Mock process() to raise. 2. Assert HTTP 500 returned."
-}"""
+class TestWatcherConfig:
+    def test_defaults(self):
+        cfg = WatcherConfig(log_file_path="logs/app.log")
+        assert cfg.poll_interval_seconds == 0.5
+        assert cfg.context_lines_before_error == 10
+        assert cfg.max_stacktrace_lines == 40
+
+    def test_custom_values(self):
+        cfg = WatcherConfig(log_file_path="x.log", poll_interval_seconds=1.0, max_stacktrace_lines=20)
+        assert cfg.poll_interval_seconds == 1.0
+        assert cfg.max_stacktrace_lines == 20
 
 
-# ---------------------------------------------------------------------------
-# _strip_fences
-# ---------------------------------------------------------------------------
+class TestInitializePosition:
+    def test_start_from_end_sets_file_size(self, tmp_log):
+        tmp_log.write_text("hello\nworld\n")
+        cfg = WatcherConfig(log_file_path=str(tmp_log))
+        w = LogWatcher(cfg)
+        w.initialize_position(start_from_end=True)
+        assert w._file_position == tmp_log.stat().st_size
+
+    def test_start_from_beginning(self, tmp_log):
+        tmp_log.write_text("some content")
+        cfg = WatcherConfig(log_file_path=str(tmp_log))
+        w = LogWatcher(cfg)
+        w.initialize_position(start_from_end=False)
+        assert w._file_position == 0
+
+    def test_creates_missing_log_file(self, tmp_path):
+        missing = tmp_path / "sub" / "new.log"
+        cfg = WatcherConfig(log_file_path=str(missing))
+        w = LogWatcher(cfg)
+        w.initialize_position(start_from_end=False)
+        assert missing.exists()
 
 
-def test_strip_fences_removes_json_fence() -> None:
-    fenced = "```json\n" + VALID_JSON_RESPONSE + "\n```"
-    result = _strip_fences(fenced)
-    assert result.startswith("{")
-    assert result.endswith("}")
+class TestReadNewLines:
+    def test_empty_file_returns_empty_list(self, watcher, tmp_log):
+        assert watcher.read_new_lines() == []
+
+    def test_reads_lines_written_after_position(self, watcher, tmp_log):
+        tmp_log.write_text("line one\nline two\n")
+        watcher._file_position = 0
+        lines = watcher.read_new_lines()
+        assert lines == ["line one", "line two"]
+
+    def test_incremental_reads(self, watcher, tmp_log):
+        tmp_log.write_text("first\n")
+        lines1 = watcher.read_new_lines()
+        assert lines1 == ["first"]
+        with tmp_log.open("a") as f:
+            f.write("second\n")
+        lines2 = watcher.read_new_lines()
+        assert lines2 == ["second"]
+
+    def test_strips_trailing_newline(self, watcher, tmp_log):
+        tmp_log.write_text("hello\n")
+        watcher._file_position = 0
+        lines = watcher.read_new_lines()
+        assert lines == ["hello"]
+
+    def test_creates_missing_file_on_read(self, tmp_path):
+        missing = tmp_path / "ghost.log"
+        cfg = WatcherConfig(log_file_path=str(missing))
+        w = LogWatcher(cfg)
+        result = w.read_new_lines()
+        assert result == []
+        assert missing.exists()
 
 
-def test_strip_fences_removes_plain_fence() -> None:
-    fenced = "```\n" + VALID_JSON_RESPONSE + "\n```"
-    result = _strip_fences(fenced)
-    assert result.startswith("{")
+class TestIsErrorSignal:
+    @pytest.mark.parametrize("line", [
+        "2024-01-01 ERROR something broke",
+        "Unhandled EXCEPTION in handler",
+        "Traceback (most recent call last):",
+        "Request returned 500",
+        "error in lower case",
+    ])
+    def test_detects_error_lines(self, watcher, line):
+        assert watcher._is_error_signal(line) is True
+
+    @pytest.mark.parametrize("line", [
+        "INFO server started on port 8000",
+        "DEBUG fetching config",
+        "GET /health 200",
+    ])
+    def test_ignores_clean_lines(self, watcher, line):
+        assert watcher._is_error_signal(line) is False
 
 
-def test_strip_fences_leaves_clean_json_unchanged() -> None:
-    result = _strip_fences(VALID_JSON_RESPONSE)
-    assert result.startswith("{")
+class TestStacktraceContinuation:
+    @pytest.mark.parametrize("line", [
+        '  File "app.py", line 42',
+        "  ValueError: bad value",
+        "ValueError: something went wrong",
+        "  at Object.render (index.js:10)",
+        "  ...",
+    ])
+    def test_recognises_continuation_lines(self, watcher, line):
+        assert watcher._looks_like_stacktrace_continuation(line) is True
+
+    @pytest.mark.parametrize("line", [
+        "INFO request completed",
+        "2024-01-01 DEBUG all good",
+    ])
+    def test_rejects_non_continuation(self, watcher, line):
+        assert watcher._looks_like_stacktrace_continuation(line) is False
 
 
-# ---------------------------------------------------------------------------
-# _try_parse_json — Stage 1
-# ---------------------------------------------------------------------------
+class TestFingerprint:
+    def test_deterministic(self):
+        assert LogWatcher._fingerprint("same") == LogWatcher._fingerprint("same")
+
+    def test_different_text_different_hash(self):
+        assert LogWatcher._fingerprint("a") != LogWatcher._fingerprint("b")
+
+    def test_length_is_16(self):
+        assert len(LogWatcher._fingerprint("anything")) == 16
+
+    def test_matches_sha256(self):
+        text = "test incident"
+        expected = hashlib.sha256(text.encode()).hexdigest()[:16]
+        assert LogWatcher._fingerprint(text) == expected
 
 
-def test_try_parse_json_valid_returns_suggestion() -> None:
-    suggestion = _try_parse_json(VALID_JSON_RESPONSE, source="provider")
-    assert suggestion is not None
-    assert suggestion.summary == "Unhandled exception in request handler."
-    assert suggestion.confidence == 0.85
-    assert suggestion.source == "provider"
-    assert suggestion.provider_error is None
+class TestBuildIncident:
+    def test_returns_log_incident(self, watcher):
+        incident = watcher._build_incident(["ERROR something failed"])
+        assert isinstance(incident, LogIncident)
+
+    def test_trigger_line_is_first_line(self, watcher):
+        incident = watcher._build_incident(["ERROR line one", "  File app.py line 5"])
+        assert incident.trigger_line == "ERROR line one"
+
+    def test_stacktrace_joins_all_lines(self, watcher):
+        lines = ["ERROR boom", "  File x.py, line 1", "  ValueError: bad"]
+        incident = watcher._build_incident(lines)
+        assert "ERROR boom" in incident.stacktrace
+        assert "ValueError: bad" in incident.stacktrace
+
+    def test_severity_is_critical(self, watcher):
+        incident = watcher._build_incident(["ERROR crash"])
+        assert incident.severity == "critical"
+
+    def test_empty_block_gives_empty_trigger(self, watcher):
+        incident = watcher._build_incident([])
+        assert incident.trigger_line == ""
+
+    def test_incident_id_is_fingerprint(self, watcher):
+        lines = ["ERROR test"]
+        incident = watcher._build_incident(lines)
+        expected_id = LogWatcher._fingerprint("\n".join(lines))
+        assert incident.incident_id == expected_id
 
 
-def test_try_parse_json_with_fences_succeeds() -> None:
-    fenced = "```json\n" + VALID_JSON_RESPONSE + "\n```"
-    suggestion = _try_parse_json(fenced, source="provider")
-    assert suggestion is not None
-    assert suggestion.confidence == 0.85
+class TestCollectMultilineBlock:
+    def test_collects_continuation_lines(self, watcher):
+        lines = [
+            "ERROR handler crashed",
+            '  File "app.py", line 10',
+            "  ValueError: bad input",
+            "INFO next request",
+        ]
+        collected, consumed = watcher._collect_multiline_error_block(0, lines)
+        assert consumed == 2
+        assert len(collected) == 3
+
+    def test_stops_at_non_continuation(self, watcher):
+        lines = ["ERROR crash", "INFO clean line"]
+        collected, consumed = watcher._collect_multiline_error_block(0, lines)
+        assert consumed == 0
+        assert collected == ["ERROR crash"]
+
+    def test_blank_line_is_included(self, watcher):
+        lines = ["ERROR crash", "", '  File "x.py", line 1']
+        collected, consumed = watcher._collect_multiline_error_block(0, lines)
+        assert consumed == 2
+        assert "" in collected
+
+    def test_respects_max_stacktrace_lines(self, tmp_log):
+        cfg = WatcherConfig(log_file_path=str(tmp_log), max_stacktrace_lines=3)
+        w = LogWatcher(cfg)
+        lines = ["ERROR x"] + ['  File "f.py", line 1'] * 10
+        collected, consumed = w._collect_multiline_error_block(0, lines)
+        assert len(collected) <= 3
+
+    def test_single_line_no_continuation(self, watcher):
+        lines = ["ERROR alone"]
+        collected, consumed = watcher._collect_multiline_error_block(0, lines)
+        assert collected == ["ERROR alone"]
+        assert consumed == 0
 
 
-def test_try_parse_json_invalid_json_returns_none() -> None:
-    result = _try_parse_json("this is not json at all", source="provider")
-    assert result is None
+class TestScanOnce:
+    def test_no_errors_returns_empty(self, watcher, tmp_log):
+        tmp_log.write_text("INFO all good\nDEBUG nothing here\n")
+        watcher._file_position = 0
+        assert watcher.scan_once() == []
+
+    def test_detects_single_error(self, watcher, tmp_log):
+        tmp_log.write_text("ERROR database connection failed\n")
+        watcher._file_position = 0
+        incidents = watcher.scan_once()
+        assert len(incidents) == 1
+        assert "database connection failed" in incidents[0].trigger_line
+
+    def test_detects_multiple_errors(self, watcher, tmp_log):
+        tmp_log.write_text("ERROR first\nINFO ok\nERROR second\n")
+        watcher._file_position = 0
+        assert len(watcher.scan_once()) == 2
+
+    def test_aggregates_multiline_traceback(self, watcher, tmp_log):
+        content = "Traceback (most recent call last):\n  File \"app.py\", line 10\n  ValueError: bad\nINFO next\n"
+        tmp_log.write_text(content)
+        watcher._file_position = 0
+        incidents = watcher.scan_once()
+        assert len(incidents) == 1
+        assert "ValueError" in incidents[0].stacktrace
+
+    def test_returns_log_incident_objects(self, watcher, tmp_log):
+        tmp_log.write_text("ERROR crash!\n")
+        watcher._file_position = 0
+        incidents = watcher.scan_once()
+        assert all(isinstance(i, LogIncident) for i in incidents)
+
+    def test_500_signal_detected(self, watcher, tmp_log):
+        tmp_log.write_text("GET /api/data 500 Internal Server Error\n")
+        watcher._file_position = 0
+        assert len(watcher.scan_once()) == 1
+
+    def test_incremental_scan_only_reads_new_lines(self, watcher, tmp_log):
+        tmp_log.write_text("INFO warm up\n")
+        watcher.read_new_lines()
+        with tmp_log.open("a") as f:
+            f.write("ERROR new error\n")
+        assert len(watcher.scan_once()) == 1
 
 
-def test_try_parse_json_missing_field_returns_none() -> None:
-    # confidence field missing — Pydantic should reject it
-    bad_json = (
-        '{"summary": "ok", "code_fix": "ok", "config_change": "ok", "risks": "ok"}'
-    )
-    result = _try_parse_json(bad_json, source="provider")
-    assert result is None
+class TestFollow:
+    def test_follow_stops_after_n_iterations(self, tmp_log):
+        cfg = WatcherConfig(log_file_path=str(tmp_log), poll_interval_seconds=0)
+        w = LogWatcher(cfg)
+        with patch("time.sleep"):
+            result = list(w.follow(stop_after_iterations=2))
+        assert isinstance(result, list)
+
+    def test_follow_yields_incidents_from_log(self, tmp_log):
+        tmp_log.write_text("ERROR boom\n")
+        cfg = WatcherConfig(log_file_path=str(tmp_log), poll_interval_seconds=0)
+        w = LogWatcher(cfg)
+        w._file_position = 0
+        with patch.object(w, "initialize_position"):
+            with patch("time.sleep"):
+                result = list(w.follow(stop_after_iterations=1))
+        assert len(result) >= 1
 
 
-def test_try_parse_json_confidence_out_of_range_returns_none() -> None:
-    bad_json = '{"summary": "ok", "code_fix": "ok", "config_change": "ok", "confidence": 1.5, "risks": "ok"}'
-    result = _try_parse_json(bad_json, source="provider")
-    assert result is None
+class TestEnsureLogFileExists:
+    def test_creates_nested_directories_and_file(self, tmp_path):
+        nested = tmp_path / "a" / "b" / "app.log"
+        cfg = WatcherConfig(log_file_path=str(nested))
+        w = LogWatcher(cfg)
+        w._ensure_log_file_exists()
+        assert nested.exists()
 
-
-def test_try_parse_json_empty_string_returns_none() -> None:
-    result = _try_parse_json("", source="provider")
-    assert result is None
-
-
-# ---------------------------------------------------------------------------
-# _try_parse_sections — Stage 2 (legacy fallback)
-# ---------------------------------------------------------------------------
-
-SECTION_RESPONSE = """SUMMARY:
-Unhandled exception detected in request lifecycle.
-
-CODE_FIX:
-Add try/except around the failing call.
-
-CONFIG_CHANGE:
-Set LOG_LEVEL=INFO.
-
-CONFIDENCE:
-0.70
-
-RISKS:
-Validate fix in staging first."""
-
-
-def test_try_parse_sections_valid_returns_suggestion() -> None:
-    suggestion = _try_parse_sections(SECTION_RESPONSE, source="provider")
-    assert suggestion is not None
-    assert "Unhandled exception" in suggestion.summary
-    assert suggestion.confidence == 0.70
-
-
-def test_try_parse_sections_no_sections_returns_none() -> None:
-    result = _try_parse_sections("random text with no sections", source="provider")
-    assert result is None
-
-
-# ---------------------------------------------------------------------------
-# _parse_llm_output — full fallback chain
-# ---------------------------------------------------------------------------
-
-
-def test_parse_llm_output_stage1_json_succeeds() -> None:
-    suggestion = _parse_llm_output(VALID_JSON_RESPONSE, source="provider")
-    assert suggestion.source == "provider"
-    assert suggestion.provider_error is None
-    assert suggestion.confidence == 0.85
-
-
-def test_parse_llm_output_stage2_section_fallback() -> None:
-    suggestion = _parse_llm_output(SECTION_RESPONSE, source="provider")
-    assert suggestion is not None
-    assert suggestion.confidence == 0.70
-
-
-def test_parse_llm_output_stage3_stub_last_resort() -> None:
-    suggestion = _parse_llm_output(
-        "completely unparseable gibberish @@##", source="provider"
-    )
-    assert suggestion.source == "fallback"
-    assert suggestion.provider_error is not None
-    assert suggestion.confidence == 0.1
-
-
-# ---------------------------------------------------------------------------
-# StubLLMClient — still valid
-# ---------------------------------------------------------------------------
-
-
-def test_stub_llm_client_returns_valid_suggestion() -> None:
-    client = StubLLMClient()
-    incident = _make_incident()
-    suggestion = client.analyze_incident(incident)
-    assert suggestion.source == "stub"
-    assert 0.0 <= suggestion.confidence <= 1.0
-    assert suggestion.summary
-    assert suggestion.proposed_code_fix
-
-
-# ---------------------------------------------------------------------------
-# Milestone 2 — proposed_patch and test_guidance
-# ---------------------------------------------------------------------------
-
-
-def test_stub_returns_proposed_patch() -> None:
-    client = StubLLMClient()
-    suggestion = client.analyze_incident(_make_incident())
-    assert suggestion.proposed_patch is not None
-    assert "try" in suggestion.proposed_patch
-
-
-def test_stub_returns_test_guidance() -> None:
-    client = StubLLMClient()
-    suggestion = client.analyze_incident(_make_incident())
-    assert suggestion.test_guidance is not None
-    assert len(suggestion.test_guidance) > 10
-
-
-def test_json_parse_includes_patch_and_guidance() -> None:
-    json_with_patch = """{
-  "summary": "Error in handler.",
-  "code_fix": "Add try/except.",
-  "config_change": "Set LOG_LEVEL=INFO.",
-  "confidence": 0.80,
-  "risks": "Test in staging first.",
-    "patch_file": "src/services/handler.py",
-  "proposed_patch": "try:\\n    process()\\nexcept Exception as e:\\n    raise HTTPException(500)",
-  "test_guidance": "1. Mock process() to raise. 2. Assert 500 returned."
-}"""
-    suggestion = _try_parse_json(json_with_patch, source="provider")
-    assert suggestion is not None
-    assert suggestion.proposed_patch is not None
-    assert "process()" in suggestion.proposed_patch
-    assert suggestion.test_guidance is not None
-
-
-def test_fallback_patch_fields_are_none() -> None:
-    suggestion = _parse_llm_output("completely unparseable @@##", source="provider")
-    assert suggestion.source == "fallback"
-    assert suggestion.proposed_patch is None
-    assert suggestion.test_guidance is None
+    def test_no_error_if_file_already_exists(self, tmp_log):
+        cfg = WatcherConfig(log_file_path=str(tmp_log))
+        w = LogWatcher(cfg)
+        w._ensure_log_file_exists()
+        assert tmp_log.exists()
