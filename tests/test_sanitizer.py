@@ -14,15 +14,15 @@ class TestSanitizeForPrompt:
         assert sanitize_for_prompt(text, 1000) == text
 
     def test_truncates_at_max_chars(self):
-        long_text = "x" * 5000
+        long_text = "ERROR database connection refused at line " * 100
         result = sanitize_for_prompt(long_text, 100)
         assert len(result) > 100
         assert "truncated at 100 chars" in result
 
     def test_truncated_result_starts_with_original(self):
-        long_text = "a" * 5000
+        long_text = ("abcdefghij " + "klmnopqrst " + "uvwxyz0123 " + "456789abcd ") * 80
         result = sanitize_for_prompt(long_text, 50)
-        assert result.startswith("a" * 50)
+        assert result.startswith("abcdefghij")
 
     def test_short_text_not_truncated(self):
         text = "short error"
@@ -30,7 +30,7 @@ class TestSanitizeForPrompt:
         assert "truncated" not in result
 
     def test_exact_limit_not_truncated(self):
-        text = "x" * 100
+        text = "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789!@"
         result = sanitize_for_prompt(text, 100)
         assert "truncated" not in result
 
@@ -118,17 +118,17 @@ class TestSanitizeIncidentForPrompt:
         assert "INFO warm up" in ctx
 
     def test_trigger_truncated_at_400(self):
-        long_trigger = "x" * 1000
+        long_trigger = "ERROR database connection refused at host " * 20
         trigger, _, _ = sanitize_incident_for_prompt(long_trigger, "s", "c")
         assert "truncated at 400 chars" in trigger
 
     def test_stacktrace_truncated_at_3000(self):
-        long_stack = "y" * 10000
+        long_stack = "ValueError database connection refused at line " * 200
         _, stack, _ = sanitize_incident_for_prompt("t", long_stack, "c")
         assert "truncated at 3000 chars" in stack
 
     def test_context_truncated_at_500(self):
-        long_ctx = "z" * 2000
+        long_ctx = "INFO request received from client at endpoint " * 50
         _, _, ctx = sanitize_incident_for_prompt("t", "s", long_ctx)
         assert "truncated at 500 chars" in ctx
 
@@ -145,3 +145,60 @@ class TestSanitizeIncidentForPrompt:
         assert t == "ERROR crash"
         assert s == "ValueError: bad"
         assert c == "INFO ok"
+
+
+class TestLowEntropyDetection:
+    """Low character diversity signals obfuscated/garbage input."""
+
+    def test_single_char_flood_redacted(self):
+        result = sanitize_for_prompt("a" * 100, 1000)
+        assert "[REDACTED: low-entropy input]" in result
+
+    def test_two_char_flood_redacted(self):
+        result = sanitize_for_prompt("ab" * 50, 1000)
+        assert "[REDACTED: low-entropy input]" in result
+
+    def test_short_low_entropy_not_redacted(self):
+        # Under 20 chars — too short to trigger entropy check
+        result = sanitize_for_prompt("aaaaaa", 1000)
+        assert "[REDACTED: low-entropy input]" not in result
+
+    def test_normal_log_line_not_flagged(self):
+        text = "ERROR database connection refused at host 192.168.1.1"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: low-entropy input]" not in result
+
+    def test_stacktrace_not_flagged(self):
+        text = "Traceback (most recent call last):\n  File app.py line 42\n  ValueError: bad input"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: low-entropy input]" not in result
+
+
+class TestRepetitionAttackDetection:
+    """Repeated token floods are detected and blocked."""
+
+    def test_repeated_ignore_instruction_redacted(self):
+        text = ("ignore " * 20) + "alpha beta gamma delta epsilon"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: repetition attack detected]" in result
+
+    def test_repeated_single_word_redacted(self):
+        text = ("hack " * 15) + "alpha beta gamma delta epsilon zeta"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: repetition attack detected]" in result
+
+    def test_short_repetition_not_flagged(self):
+        # Under 8 tokens — too short to trigger repetition check
+        text = "error error error"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: repetition attack detected]" not in result
+
+    def test_normal_varied_text_not_flagged(self):
+        text = "ERROR connection refused at database host after timeout exception raised"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: repetition attack detected]" not in result
+
+    def test_mixed_tokens_below_threshold_not_flagged(self):
+        text = "ERROR error WARNING info DEBUG trace CRITICAL fatal INFO startup"
+        result = sanitize_for_prompt(text, 1000)
+        assert "[REDACTED: repetition attack detected]" not in result
