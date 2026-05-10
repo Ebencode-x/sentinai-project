@@ -31,3 +31,6 @@ htmlcov/
 # Logs (optional: uncomment if you don't want log files in repo)
 # logs/*.log
 logs/*.log
+
+# Local env and dev deps
+requirements-dev.txt
