@@ -153,10 +153,12 @@ class TestRateLimiterProtocol:
 
     def test_token_bucket_satisfies_protocol(self):
         from src.core.rate_limiter import RateLimiter, TokenBucket
+
         bucket = TokenBucket(capacity=5, refill_per_minute=5)
         assert isinstance(bucket, RateLimiter)
 
     def test_global_instances_satisfy_protocol(self):
         from src.core.rate_limiter import RateLimiter, llm_rate_limiter, pr_rate_limiter
+
         assert isinstance(llm_rate_limiter, RateLimiter)
         assert isinstance(pr_rate_limiter, RateLimiter)
