@@ -4,6 +4,8 @@
 from __future__ import annotations
 from pathlib import Path
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from src.api.routes import router
 from src.core.config import settings
@@ -13,16 +15,18 @@ _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start from end to avoid replaying stale logs during demos.
+    app_state.watcher.initialize_position(start_from_end=True)
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     description="Self-healing DevOps agent that watches logs and prepares AI remediation suggestions.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.include_router(router)
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    # Start from end to avoid replaying stale logs during demos.
-    app_state.watcher.initialize_position(start_from_end=True)
