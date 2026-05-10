@@ -6,8 +6,6 @@ from __future__ import annotations
 from src.core.sanitizer import (
     sanitize_for_prompt,
     sanitize_incident_for_prompt,
-    _MAX_STACKTRACE_CHARS,
-    _MAX_TRIGGER_CHARS,
 )
 
 
