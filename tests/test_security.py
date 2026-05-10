@@ -3,71 +3,32 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from src.api.security import require_api_key
 
-def _make_app(api_key: str):
-    """Build a minimal FastAPI app with require_api_key wired, using a specific key."""
 
-    import src.api.security as sec_mod
-
-    original_key = sec_mod._CONFIGURED_KEY
-    sec_mod._CONFIGURED_KEY = api_key
-
-    from fastapi import Depends, FastAPI
-
-    from src.api.security import require_api_key
-
+def _make_client() -> TestClient:
     app = FastAPI()
 
     @app.get("/protected", dependencies=[Depends(require_api_key)])
     def protected():
         return {"ok": True}
 
-    yield TestClient(app)
-    sec_mod._CONFIGURED_KEY = original_key
+    return TestClient(app)
 
 
 @pytest.fixture
-def client_no_key():
-    """App running without SENTINAI_API_KEY configured (dev/demo mode)."""
-    import src.api.security as sec_mod
-
-    original = sec_mod._CONFIGURED_KEY
-    sec_mod._CONFIGURED_KEY = ""
-    from fastapi import Depends, FastAPI
-    from src.api.security import require_api_key
-
-    app = FastAPI()
-
-    @app.get("/protected", dependencies=[Depends(require_api_key)])
-    def protected():
-        return {"ok": True}
-
-    client = TestClient(app)
-    yield client
-    sec_mod._CONFIGURED_KEY = original
+def client_no_key(monkeypatch):
+    monkeypatch.delenv("SENTINAI_API_KEY", raising=False)
+    return _make_client()
 
 
 @pytest.fixture
-def client_with_key():
-    """App running WITH SENTINAI_API_KEY = test-secret-key."""
-    import src.api.security as sec_mod
-
-    original = sec_mod._CONFIGURED_KEY
-    sec_mod._CONFIGURED_KEY = "test-secret-key"
-    from fastapi import Depends, FastAPI
-    from src.api.security import require_api_key
-
-    app = FastAPI()
-
-    @app.get("/protected", dependencies=[Depends(require_api_key)])
-    def protected():
-        return {"ok": True}
-
-    client = TestClient(app)
-    yield client
-    sec_mod._CONFIGURED_KEY = original
+def client_with_key(monkeypatch):
+    monkeypatch.setenv("SENTINAI_API_KEY", "test-secret-key")
+    return _make_client()
 
 
 class TestNoKeyConfigured:
