@@ -1,4 +1,5 @@
 """M8 tests for src/api/routes.py."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -83,6 +84,7 @@ class TestIncidents:
 
     def test_incident_appears_in_response(self, client):
         from src.core.state import app_state
+
         inc = make_incident("route-test-001")
         app_state.recent_incidents.append(inc)
         ids = [i["incident_id"] for i in client.get("/incidents").json()]
@@ -91,6 +93,7 @@ class TestIncidents:
 
     def test_incident_fields_present(self, client):
         from src.core.state import app_state
+
         inc = make_incident("field-check-002")
         app_state.recent_incidents.append(inc)
         data = client.get("/incidents").json()
@@ -109,6 +112,7 @@ class TestSuggestions:
 
     def test_suggestion_appears_in_response(self, client):
         from src.core.state import app_state
+
         s = make_suggestion("My specific fix")
         app_state.recent_suggestions.append(s)
         data = client.get("/suggestions").json()
@@ -118,6 +122,7 @@ class TestSuggestions:
 
     def test_suggestion_fields_present(self, client):
         from src.core.state import app_state
+
         s = make_suggestion()
         app_state.recent_suggestions.append(s)
         last = client.get("/suggestions").json()[-1]
@@ -130,23 +135,27 @@ class TestSuggestions:
 class TestSuggestionsLatest:
     def test_404_when_empty(self, client):
         from src.core.state import app_state
+
         app_state.recent_suggestions.clear()
         assert client.get("/suggestions/latest").status_code == 404
 
     def test_404_detail_message(self, client):
         from src.core.state import app_state
+
         app_state.recent_suggestions.clear()
         data = client.get("/suggestions/latest").json()
         assert "No suggestions yet" in data["detail"]
 
     def test_200_when_suggestions_exist(self, client):
         from src.core.state import app_state
+
         app_state.recent_suggestions.append(make_suggestion())
         assert client.get("/suggestions/latest").status_code == 200
         app_state.recent_suggestions.clear()
 
     def test_returns_last_suggestion(self, client):
         from src.core.state import app_state
+
         app_state.recent_suggestions.append(make_suggestion("First"))
         app_state.recent_suggestions.append(make_suggestion("Second"))
         data = client.get("/suggestions/latest").json()
