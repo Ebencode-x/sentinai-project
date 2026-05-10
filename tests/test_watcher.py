@@ -1,4 +1,5 @@
 """M8 tests for src/services/watcher.py."""
+
 from __future__ import annotations
 
 import hashlib
@@ -34,7 +35,9 @@ class TestWatcherConfig:
         assert cfg.max_stacktrace_lines == 40
 
     def test_custom_values(self):
-        cfg = WatcherConfig(log_file_path="x.log", poll_interval_seconds=1.0, max_stacktrace_lines=20)
+        cfg = WatcherConfig(
+            log_file_path="x.log", poll_interval_seconds=1.0, max_stacktrace_lines=20
+        )
         assert cfg.poll_interval_seconds == 1.0
         assert cfg.max_stacktrace_lines == 20
 
@@ -97,40 +100,52 @@ class TestReadNewLines:
 
 
 class TestIsErrorSignal:
-    @pytest.mark.parametrize("line", [
-        "2024-01-01 ERROR something broke",
-        "Unhandled EXCEPTION in handler",
-        "Traceback (most recent call last):",
-        "Request returned 500",
-        "error in lower case",
-    ])
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "2024-01-01 ERROR something broke",
+            "Unhandled EXCEPTION in handler",
+            "Traceback (most recent call last):",
+            "Request returned 500",
+            "error in lower case",
+        ],
+    )
     def test_detects_error_lines(self, watcher, line):
         assert watcher._is_error_signal(line) is True
 
-    @pytest.mark.parametrize("line", [
-        "INFO server started on port 8000",
-        "DEBUG fetching config",
-        "GET /health 200",
-    ])
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "INFO server started on port 8000",
+            "DEBUG fetching config",
+            "GET /health 200",
+        ],
+    )
     def test_ignores_clean_lines(self, watcher, line):
         assert watcher._is_error_signal(line) is False
 
 
 class TestStacktraceContinuation:
-    @pytest.mark.parametrize("line", [
-        '  File "app.py", line 42',
-        "  ValueError: bad value",
-        "ValueError: something went wrong",
-        "  at Object.render (index.js:10)",
-        "  ...",
-    ])
+    @pytest.mark.parametrize(
+        "line",
+        [
+            '  File "app.py", line 42',
+            "  ValueError: bad value",
+            "ValueError: something went wrong",
+            "  at Object.render (index.js:10)",
+            "  ...",
+        ],
+    )
     def test_recognises_continuation_lines(self, watcher, line):
         assert watcher._looks_like_stacktrace_continuation(line) is True
 
-    @pytest.mark.parametrize("line", [
-        "INFO request completed",
-        "2024-01-01 DEBUG all good",
-    ])
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "INFO request completed",
+            "2024-01-01 DEBUG all good",
+        ],
+    )
     def test_rejects_non_continuation(self, watcher, line):
         assert watcher._looks_like_stacktrace_continuation(line) is False
 
@@ -238,7 +253,7 @@ class TestScanOnce:
         assert len(watcher.scan_once()) == 2
 
     def test_aggregates_multiline_traceback(self, watcher, tmp_log):
-        content = "Traceback (most recent call last):\n  File \"app.py\", line 10\n  ValueError: bad\nINFO next\n"
+        content = 'Traceback (most recent call last):\n  File "app.py", line 10\n  ValueError: bad\nINFO next\n'
         tmp_log.write_text(content)
         watcher._file_position = 0
         incidents = watcher.scan_once()
