@@ -33,4 +33,3 @@ htmlcov/
 logs/*.log
 
 # Local env and dev deps
-requirements-dev.txt
