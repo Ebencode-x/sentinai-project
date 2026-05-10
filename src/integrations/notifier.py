@@ -104,8 +104,7 @@ def _build_slack_payload(
                 {
                     "type": "mrkdwn",
                     "text": (
-                        f"*Detected*\n"
-                        f"{incident.detected_at_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+                        f"*Detected*\n{incident.detected_at_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC"
                     ),
                 },
                 {
