@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 import time
 
-import pytest
 
 from src.core.rate_limiter import TokenBucket
 
