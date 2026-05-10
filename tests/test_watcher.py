@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 from unittest.mock import patch
 
 import pytest
