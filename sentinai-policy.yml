@@ -1,0 +1,61 @@
+# SentinAI Patch Policy — controls what AI is allowed to modify
+# All paths are repo-relative. Globs supported.
+
+allowed_paths:
+  - src/
+  - tests/
+
+blocked_paths:
+  - .env
+  - .env.example
+  - secrets/
+  - infra/
+  - docker/
+  - migrations/
+  - Dockerfile
+  - docker-compose.yml
+  - .github/
+  - sentinai-policy.yml
+
+max_files_changed: 5
+max_patch_lines: 120
+
+forbidden_patterns:
+  - "shell=True"
+  - "exec("
+  - "eval("
+  - "subprocess.Popen"
+  - "os.system"
+  - "__import__"
+  - "importlib.import_module"
+  - "open("
+  - "pickle.loads"
+  - "yaml.load("
+
+require_tests_pass: true
+
+risk_tiers:
+  low:
+    auto_pr: true
+    patterns:
+      - "tests/"
+      - ".md"
+      - "logging"
+      - "comment"
+  medium:
+    require_human_review: true
+    patterns:
+      - "src/services/"
+      - "src/core/"
+      - "src/models/"
+  high:
+    block: true
+    patterns:
+      - "src/api/security"
+      - "auth"
+      - "token"
+      - "password"
+      - "secret"
+      - "credential"
+      - "jwt"
+      - "migrations/"
