@@ -1,0 +1,44 @@
+# SentinAI Sandbox — B1
+# Ephemeral container for AI-generated patch execution.
+#
+# Security constraints enforced at runtime (docker run):
+#   --network none          no outbound connections
+#   --read-only             root FS is immutable
+#   --tmpfs /workspace      writable scratch space only
+#   --memory 256m           hard memory ceiling
+#   --cpus 0.5              half a core maximum
+#   --user sentinai         non-root execution
+#   --rm                    container deleted after exit
+#   --security-opt no-new-privileges
+#
+# Build:
+#   docker build -f Dockerfile.sandbox -t sentinai-sandbox:latest .
+#
+# Run (example):
+#   docker run --rm --network none --read-only \\
+#     --tmpfs /workspace:rw,size=64m \\
+#     --memory 256m --cpus 0.5 \\
+#     --user sentinai \\
+#     --security-opt no-new-privileges \\
+#     sentinai-sandbox:latest
+
+FROM python:3.11-slim
+
+LABEL maintainer="SentinAI" description="Hardened sandbox for AI patch execution" version="1.0.0"
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && apt-get clean
+
+RUN groupadd --gid 10001 sentinai && useradd --uid 10001 --gid sentinai --shell /bin/sh --no-create-home sentinai
+
+WORKDIR /app
+
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+COPY . .
+
+RUN mkdir -p /workspace && chown sentinai:sentinai /workspace
+
+USER sentinai
+
+ENTRYPOINT ["python", "-m", "pytest", "tests/", "-q", "--tb=short", "--no-header"]
