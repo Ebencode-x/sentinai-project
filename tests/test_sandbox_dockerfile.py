@@ -6,7 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from src.services.sandbox_runner import SandboxConfig, SandboxedPatchRunner
+from src.services.sandbox_config import SandboxConfig
+from src.services.sandbox_runner import SandboxedPatchRunner
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DOCKERFILE = _REPO_ROOT / "Dockerfile.sandbox"
