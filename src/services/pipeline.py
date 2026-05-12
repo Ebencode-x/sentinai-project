@@ -1,14 +1,4 @@
-"""Autonomous Remediation Pipeline — #11 + A2/A3 Policy Gate.
-
-Flow:
-    1. Detect incident (LogWatcher)
-    2. Generate fix (LLM via RemediationEngine)
-    2b. Policy Gate (A2/A3) — BLOCK/REVIEW/ALLOW before any file is touched
-    3. Apply patch in isolated temp workspace
-    4. Run pytest in workspace
-    5. Tests pass  → open GitHub PR
-    6. Tests fail  → discard patch, return suggestion with failure note
-"""
+"""Autonomous Remediation Pipeline — #11 + A2/A3 Policy Gate + A4 Audit."""
 
 from __future__ import annotations
 
@@ -17,6 +7,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.core.audit import AuditLogger, audit_logger
 from src.integrations.github_client import GitHubClient
 from src.integrations.llm_client import build_llm_client
 from src.models.events import LogIncident, RemediationSuggestion
@@ -40,21 +31,12 @@ class PipelineResult:
     workspace: str | None = None
     policy_decision: str | None = None
     risk_tier: str | None = None
+    audit_entry: dict | None = None
 
 
 @dataclass
 class RemediationPipeline:
-    """Orchestrates the full detect → fix → policy → test → PR loop.
-
-    Parameters
-    ----------
-    project_root:
-        Absolute path to the repo root.
-    dry_run:
-        When True the pipeline runs every stage but skips PR creation.
-    policy_path:
-        Override path to sentinai-policy.yml. Defaults to repo root.
-    """
+    """Orchestrates detect → fix → policy → test → PR → audit."""
 
     project_root: Path = field(default_factory=Path.cwd)
     dry_run: bool = False
@@ -63,6 +45,7 @@ class RemediationPipeline:
     _runner: PatchRunner = field(init=False)
     _github: GitHubClient | None = field(init=False, default=None)
     _policy: PatchPolicyEngine = field(init=False)
+    _audit: AuditLogger = field(init=False)
 
     def __post_init__(self) -> None:
         self._engine = RemediationEngine(llm_client=build_llm_client())
@@ -71,18 +54,14 @@ class RemediationPipeline:
         if self.policy_path is not None:
             policy_kwargs["policy_path"] = self.policy_path
         self._policy = PatchPolicyEngine(**policy_kwargs)
+        self._audit = audit_logger
         try:
             self._github = GitHubClient()
         except Exception as exc:
             logger.warning("GitHub client unavailable — PR stage disabled: %s", exc)
             self._github = None
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def run(self, incident: LogIncident) -> PipelineResult:
-        """Execute the full remediation pipeline for one incident."""
         result = PipelineResult(
             incident=incident,
             suggestion=RemediationSuggestion(
@@ -96,26 +75,24 @@ class RemediationPipeline:
         )
 
         # Stage 1 — Generate suggestion
-        logger.info(
-            "[Pipeline] Stage 1: generating suggestion for %s",
-            incident.incident_id,
-        )
+        logger.info("[Pipeline] Stage 1: generating for %s", incident.incident_id)
         try:
             suggestion = self._engine.suggest_fix(incident)
         except Exception as exc:
             result.failure_reason = f"LLM stage failed: {exc}"
             logger.error("[Pipeline] LLM stage failed: %s", exc)
+            self._record_audit(result)
             return result
 
         result.suggestion = suggestion
 
-        # Stage 2 — Apply patch
         if not suggestion.proposed_patch or not suggestion.patch_file:
-            logger.info("[Pipeline] No patch to apply — pipeline complete (suggestion only).")
+            logger.info("[Pipeline] No patch — suggestion only.")
+            self._record_audit(result)
             return result
 
-        # Stage 2b — Policy Gate (A2/A3 Decision Firewall)
-        logger.info("[Pipeline] Stage 2b: policy gate check")
+        # Stage 2b — Policy Gate
+        logger.info("[Pipeline] Stage 2b: policy gate")
         policy_result = self._policy.check(
             patch=suggestion.proposed_patch,
             patch_file=suggestion.patch_file,
@@ -126,30 +103,30 @@ class RemediationPipeline:
         if policy_result.decision is Decision.BLOCK:
             reasons = "; ".join(policy_result.reasons)
             result.failure_reason = f"Policy BLOCK: {reasons}"
-            logger.warning("[Pipeline] Policy blocked patch: %s", reasons)
+            logger.warning("[Pipeline] Policy blocked: %s", reasons)
             result.suggestion = suggestion.model_copy(
                 update={"provider_error": result.failure_reason}
             )
+            self._record_audit(result)
             return result
 
         if policy_result.decision is Decision.REVIEW:
             reasons = "; ".join(policy_result.reasons)
-            logger.info("[Pipeline] Policy REVIEW required: %s", reasons)
             result.failure_reason = (
                 f"Policy REVIEW: human approval required "
                 f"(risk={policy_result.risk_tier}). Reasons: {reasons}"
             )
+            logger.info("[Pipeline] Policy REVIEW: %s", reasons)
             result.suggestion = suggestion.model_copy(
                 update={"provider_error": result.failure_reason}
             )
+            self._record_audit(result)
             return result
 
-        logger.info(
-            "[Pipeline] Policy ALLOW — risk=%s, proceeding.",
-            policy_result.risk_tier,
-        )
+        logger.info("[Pipeline] Policy ALLOW — risk=%s", policy_result.risk_tier)
 
-        logger.info("[Pipeline] Stage 2: applying patch to temp workspace")
+        # Stage 2 — Apply patch
+        logger.info("[Pipeline] Stage 2: applying patch")
         with tempfile.TemporaryDirectory(prefix="sentinai_") as tmpdir:
             result.workspace = tmpdir
             patch_result = self._runner.apply(
@@ -164,19 +141,19 @@ class RemediationPipeline:
                 result.suggestion = suggestion.model_copy(
                     update={"provider_error": result.failure_reason}
                 )
+                self._record_audit(result)
                 return result
 
             result.patch_applied = True
-            logger.info("[Pipeline] Patch applied successfully.")
 
             # Stage 3 — Run tests
-            logger.info("[Pipeline] Stage 3: running pytest in workspace")
+            logger.info("[Pipeline] Stage 3: running pytest")
             test_result = self._runner.run_tests(workspace=Path(tmpdir))
             result.tests_passed = test_result.success
 
             if not test_result.success:
                 result.failure_reason = (
-                    f"Tests failed after patch — discarding. Output: {test_result.output[:500]}"
+                    f"Tests failed — discarding. Output: {test_result.output[:500]}"
                 )
                 logger.warning("[Pipeline] Tests failed — patch discarded.")
                 result.suggestion = suggestion.model_copy(
@@ -185,20 +162,23 @@ class RemediationPipeline:
                         "confidence": min(suggestion.confidence, 0.2),
                     }
                 )
+                self._record_audit(result)
                 return result
 
             logger.info("[Pipeline] Tests passed.")
 
         # Stage 4 — Open PR
         if self.dry_run:
-            logger.info("[Pipeline] dry_run=True — skipping PR creation.")
+            logger.info("[Pipeline] dry_run=True — skipping PR.")
+            self._record_audit(result)
             return result
 
         if self._github is None:
             logger.info("[Pipeline] GitHub unavailable — skipping PR.")
+            self._record_audit(result)
             return result
 
-        logger.info("[Pipeline] Stage 4: opening GitHub PR")
+        logger.info("[Pipeline] Stage 4: opening PR")
         try:
             pr_url = self._github.open_patch_pr(
                 incident_id=incident.incident_id,
@@ -216,4 +196,30 @@ class RemediationPipeline:
             logger.warning("[Pipeline] PR creation failed: %s", exc)
             result.failure_reason = f"PR stage failed: {exc}"
 
+        self._record_audit(result)
         return result
+
+    # ------------------------------------------------------------------
+
+    def _record_audit(self, result: PipelineResult) -> None:
+        sug = result.suggestion
+        try:
+            entry = self._audit.record(
+                incident_id=result.incident.incident_id,
+                model=getattr(sug, "model", "unknown"),
+                provider=sug.source,
+                patch_file=sug.patch_file,
+                patch=sug.proposed_patch,
+                policy_decision=result.policy_decision,
+                risk_tier=result.risk_tier,
+                review_required=result.policy_decision == "review",
+                patch_applied=result.patch_applied,
+                tests_passed=result.tests_passed,
+                pr_url=result.pr_url,
+                failure_reason=result.failure_reason,
+                confidence=sug.confidence,
+                source=sug.source,
+            )
+            result.audit_entry = entry
+        except Exception as exc:
+            logger.error("[Pipeline] Audit record failed: %s", exc)
