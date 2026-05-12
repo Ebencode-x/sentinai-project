@@ -1,4 +1,4 @@
-"""Autonomous Remediation Pipeline — #11 + A2/A3 Policy Gate + A4 Audit + C1 Sanitizer."""
+"""Autonomous Remediation Pipeline — #11 + A2/A3 Policy Gate + A4 Audit + C1/C2."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from src.models.events import LogIncident, RemediationSuggestion
 from src.services.patch_runner import PatchRunner
 from src.services.policy_engine import Decision, PatchPolicyEngine
 from src.services.remediation_engine import RemediationEngine
+from src.services.sandbox_runner import SandboxedPatchRunner
 from src.services.secret_sanitizer import SecretSanitizer
 
 logger = logging.getLogger(__name__)
@@ -39,24 +40,38 @@ class PipelineResult:
     # C1 — sanitization telemetry (count only, never plaintext)
     redactions_input_count: int = 0
     redactions_output_count: int = 0
+    # C2 — sandbox telemetry
+    sandbox_enforced: bool = False
 
 
 @dataclass
 class RemediationPipeline:
-    """Orchestrates detect → sanitize → fix → sanitize → policy → test → PR → audit."""
+    """Orchestrates detect → sanitize → fix → sanitize → policy → sandbox → PR → audit."""
 
     project_root: Path = field(default_factory=Path.cwd)
     dry_run: bool = False
     policy_path: Path | None = None
     _engine: RemediationEngine = field(init=False)
-    _runner: PatchRunner = field(init=False)
+    _runner: SandboxedPatchRunner = field(init=False)
+    _fallback_runner: PatchRunner = field(init=False)
     _github: GitHubClient | None = field(init=False, default=None)
     _policy: PatchPolicyEngine = field(init=False)
     _audit: AuditLogger = field(init=False)
 
     def __post_init__(self) -> None:
         self._engine = RemediationEngine(llm_client=build_llm_client())
-        self._runner = PatchRunner(project_root=self.project_root)
+        # C2 — prefer sandboxed runner; falls back internally when Docker unavailable
+        try:
+            self._runner = SandboxedPatchRunner(project_root=self.project_root)
+            self._fallback_runner = self._runner._fallback
+            logger.info("[Pipeline] SandboxedPatchRunner initialised (C2)")
+        except Exception as exc:
+            logger.warning(
+                "[Pipeline] SandboxedPatchRunner unavailable — using PatchRunner: %s", exc
+            )
+            plain = PatchRunner(project_root=self.project_root)
+            self._runner = plain  # type: ignore[assignment]
+            self._fallback_runner = plain
         policy_kwargs = {}
         if self.policy_path is not None:
             policy_kwargs["policy_path"] = self.policy_path
@@ -176,6 +191,7 @@ class RemediationPipeline:
                 return result
 
             result.patch_applied = True
+            result.sandbox_enforced = isinstance(self._runner, SandboxedPatchRunner)
 
             # Stage 3 — Run tests
             logger.info("[Pipeline] Stage 3: running pytest")
