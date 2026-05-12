@@ -1,0 +1,19 @@
+sandbox:
+  image: sentinai-sandbox:latest
+  workspace_dir: /workspace
+  network: none
+  read_only_root: true
+  tmpfs_workspace: true
+  tmpfs_size_mb: 64
+  security_opt:
+    - no-new-privileges
+  resources:
+    memory_mb: 256
+    cpus: 0.5
+    timeout_seconds: 120
+  user: sentinai
+  drop_capabilities:
+    - ALL
+  add_capabilities: []
+  project_mount: /app
+  workspace_mount: /workspace
