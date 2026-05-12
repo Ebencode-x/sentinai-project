@@ -1,4 +1,4 @@
-"""Autonomous Remediation Pipeline — #11 + A2/A3 Policy Gate + A4 Audit."""
+"""Autonomous Remediation Pipeline — #11 + A2/A3 Policy Gate + A4 Audit + C1 Sanitizer."""
 
 from __future__ import annotations
 
@@ -14,8 +14,12 @@ from src.models.events import LogIncident, RemediationSuggestion
 from src.services.patch_runner import PatchRunner
 from src.services.policy_engine import Decision, PatchPolicyEngine
 from src.services.remediation_engine import RemediationEngine
+from src.services.secret_sanitizer import SecretSanitizer
 
 logger = logging.getLogger(__name__)
+
+# Module-level singleton — one sanitizer instance, shared across all runs.
+_sanitizer = SecretSanitizer()
 
 
 @dataclass
@@ -32,11 +36,14 @@ class PipelineResult:
     policy_decision: str | None = None
     risk_tier: str | None = None
     audit_entry: dict | None = None
+    # C1 — sanitization telemetry (count only, never plaintext)
+    redactions_input_count: int = 0
+    redactions_output_count: int = 0
 
 
 @dataclass
 class RemediationPipeline:
-    """Orchestrates detect → fix → policy → test → PR → audit."""
+    """Orchestrates detect → sanitize → fix → sanitize → policy → test → PR → audit."""
 
     project_root: Path = field(default_factory=Path.cwd)
     dry_run: bool = False
@@ -74,7 +81,18 @@ class RemediationPipeline:
             ),
         )
 
-        # Stage 1 — Generate suggestion
+        # ----------------------------------------------------------------
+        # Stage 0 — Sanitize incident fields before LLM sees them
+        # ----------------------------------------------------------------
+        logger.info("[Pipeline] Stage 0: sanitizing incident input")
+        incident, redactions_in = _sanitize_incident(incident)
+        result.redactions_input_count = redactions_in
+        if redactions_in:
+            logger.warning("[Pipeline] %d secret(s) redacted from incident input", redactions_in)
+
+        # ----------------------------------------------------------------
+        # Stage 1 — Generate suggestion via LLM
+        # ----------------------------------------------------------------
         logger.info("[Pipeline] Stage 1: generating for %s", incident.incident_id)
         try:
             suggestion = self._engine.suggest_fix(incident)
@@ -84,6 +102,15 @@ class RemediationPipeline:
             self._record_audit(result)
             return result
 
+        # ----------------------------------------------------------------
+        # Stage 1.5 — Sanitize LLM output (defense in depth)
+        # ----------------------------------------------------------------
+        logger.info("[Pipeline] Stage 1.5: sanitizing LLM output")
+        suggestion, redactions_out = _sanitize_suggestion(suggestion)
+        result.redactions_output_count = redactions_out
+        if redactions_out:
+            logger.warning("[Pipeline] %d secret(s) redacted from LLM output", redactions_out)
+
         result.suggestion = suggestion
 
         if not suggestion.proposed_patch or not suggestion.patch_file:
@@ -91,7 +118,9 @@ class RemediationPipeline:
             self._record_audit(result)
             return result
 
+        # ----------------------------------------------------------------
         # Stage 2b — Policy Gate
+        # ----------------------------------------------------------------
         logger.info("[Pipeline] Stage 2b: policy gate")
         policy_result = self._policy.check(
             patch=suggestion.proposed_patch,
@@ -125,7 +154,9 @@ class RemediationPipeline:
 
         logger.info("[Pipeline] Policy ALLOW — risk=%s", policy_result.risk_tier)
 
+        # ----------------------------------------------------------------
         # Stage 2 — Apply patch
+        # ----------------------------------------------------------------
         logger.info("[Pipeline] Stage 2: applying patch")
         with tempfile.TemporaryDirectory(prefix="sentinai_") as tmpdir:
             result.workspace = tmpdir
@@ -167,7 +198,9 @@ class RemediationPipeline:
 
             logger.info("[Pipeline] Tests passed.")
 
+        # ----------------------------------------------------------------
         # Stage 4 — Open PR
+        # ----------------------------------------------------------------
         if self.dry_run:
             logger.info("[Pipeline] dry_run=True — skipping PR.")
             self._record_audit(result)
@@ -200,6 +233,8 @@ class RemediationPipeline:
         return result
 
     # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _record_audit(self, result: PipelineResult) -> None:
         sug = result.suggestion
@@ -223,3 +258,67 @@ class RemediationPipeline:
             result.audit_entry = entry
         except Exception as exc:
             logger.error("[Pipeline] Audit record failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Module-level sanitization helpers
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_incident(incident: LogIncident) -> tuple[LogIncident, int]:
+    """Sanitize all free-text fields of an incident.
+
+    Returns a new LogIncident with secrets redacted and the total
+    redaction count (for telemetry — no plaintext ever logged).
+    """
+    fields_to_sanitize = {
+        "trigger_line": incident.trigger_line,
+        "stacktrace": incident.stacktrace or "",
+        "context_before_error": incident.context_before_error or "",
+    }
+
+    updates: dict[str, str] = {}
+    total_redactions = 0
+
+    for field_name, value in fields_to_sanitize.items():
+        if not value:
+            continue
+        result = _sanitizer.sanitize(value)
+        updates[field_name] = result.text
+        total_redactions += len(result.redactions)
+
+    if not updates:
+        return incident, 0
+
+    return incident.model_copy(update=updates), total_redactions
+
+
+def _sanitize_suggestion(
+    suggestion: RemediationSuggestion,
+) -> tuple[RemediationSuggestion, int]:
+    """Sanitize free-text fields of an LLM suggestion (defense in depth).
+
+    Returns a new RemediationSuggestion with secrets redacted and the
+    total redaction count.
+    """
+    fields_to_sanitize = {
+        "summary": suggestion.summary or "",
+        "proposed_patch": suggestion.proposed_patch or "",
+        "risks": suggestion.risks or "",
+        "test_guidance": suggestion.test_guidance or "",
+    }
+
+    updates: dict[str, str] = {}
+    total_redactions = 0
+
+    for field_name, value in fields_to_sanitize.items():
+        if not value:
+            continue
+        result = _sanitizer.sanitize(value)
+        updates[field_name] = result.text
+        total_redactions += len(result.redactions)
+
+    if not updates:
+        return suggestion, 0
+
+    return suggestion.model_copy(update=updates), total_redactions
