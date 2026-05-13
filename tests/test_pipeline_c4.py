@@ -237,6 +237,7 @@ class TestTelemetryAccuracy:
     def test_patch_applied_true_when_runner_succeeds(self, tmp_path: Path):
         """patch_applied must be True when apply + tests both succeed."""
         pipeline = _build_pipeline(tmp_path)
+        pipeline._sandbox_available = True  # D2: override for this test
         incident = _make_incident()
         apply_ctx, tests_ctx = _mock_patch_run(pipeline)
 
@@ -264,8 +265,9 @@ class TestTelemetryAccuracy:
         assert "disk full" in result.failure_reason
 
     def test_tests_passed_false_when_tests_fail(self, tmp_path: Path):
-        """tests_passed must be False (not None) when pytest reports failure."""
+        """tests_passed is False when pytest fails (sandbox must be available)."""
         pipeline = _build_pipeline(tmp_path)
+        pipeline._sandbox_available = True  # D2: override for this test
         incident = _make_incident()
 
         with patch.object(pipeline._engine, "suggest_fix", return_value=_make_suggestion()):
@@ -277,7 +279,7 @@ class TestTelemetryAccuracy:
                 with patch.object(
                     pipeline._runner,
                     "run_tests",
-                    return_value=MagicMock(success=False, output="1 failed"),
+                    return_value=MagicMock(success=False, output="1 failed", returncode=1),
                 ):
                     result = pipeline.run(incident)
 
@@ -458,6 +460,7 @@ class TestFailurePathAudit:
 
         pipeline = _build_pipeline(tmp_path)
         pipeline._audit = audit
+        pipeline._sandbox_available = True  # D2: override for this test
 
         incident = _make_incident()
 
@@ -470,7 +473,7 @@ class TestFailurePathAudit:
                 with patch.object(
                     pipeline._runner,
                     "run_tests",
-                    return_value=MagicMock(success=False, output="2 failed"),
+                    return_value=MagicMock(success=False, output="2 failed", returncode=1),
                 ):
                     result = pipeline.run(incident)
 

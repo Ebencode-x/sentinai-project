@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.services.patch_runner import TestResult
 from src.services.sandbox_runner import SandboxedPatchRunner
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -127,10 +126,12 @@ class TestRunInContainer:
 
     @patch("src.services.sandbox_runner.shutil.which", return_value=None)
     def test_run_tests_falls_back_when_no_docker(self, mock_which, tmp_path):
+        """D2: Docker absent + allow_host_fallback=False -> BLOCK (not fallback)."""
         runner = SandboxedPatchRunner(project_root=_REPO_ROOT)
-        with patch.object(runner._fallback, "run_tests", return_value=TestResult(success=True)):
-            result = runner.run_tests(tmp_path)
-        assert result.success is True
+        result = runner.run_tests(tmp_path)
+        assert result.success is False
+        assert result.returncode == -2
+        assert "SANDBOX BLOCKED" in result.output
 
     @patch("src.services.sandbox_runner.shutil.which", return_value="/usr/bin/docker")
     @patch("src.services.sandbox_runner.subprocess.run")
