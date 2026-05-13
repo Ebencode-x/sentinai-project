@@ -31,6 +31,9 @@ class SandboxConfig:
     project_mount: str = "/app"
     security_opt: list[str] = field(default_factory=lambda: ["no-new-privileges"])
     drop_capabilities: list[str] = field(default_factory=lambda: ["ALL"])
+    # D2 — allow host fallback only in development/CI.
+    # MUST be False in production. Docker unavailable + False = BLOCK.
+    allow_host_fallback: bool = False
 
     @classmethod
     def from_yaml(cls, path: Path = _DEFAULT_CONFIG) -> SandboxConfig:
@@ -53,6 +56,7 @@ class SandboxConfig:
                 project_mount=sb.get("project_mount", cls.project_mount),
                 security_opt=sb.get("security_opt", ["no-new-privileges"]),
                 drop_capabilities=sb.get("drop_capabilities", ["ALL"]),
+                allow_host_fallback=sb.get("allow_host_fallback", False),
             )
         except FileNotFoundError:
             logger.warning("sentinai-sandbox.yml not found — using defaults")
