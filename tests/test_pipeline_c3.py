@@ -21,6 +21,7 @@ from src.services.pipeline import PipelineResult, RemediationPipeline
 # Fake incident factory
 # ---------------------------------------------------------------------------
 
+
 def _make_incident(
     *,
     trigger_line: str = "ERROR database connection refused at host 192.168.1.1",
@@ -60,6 +61,7 @@ def _make_suggestion(**kwargs) -> RemediationSuggestion:
 # ---------------------------------------------------------------------------
 # Helpers — build pipeline with all external I/O mocked
 # ---------------------------------------------------------------------------
+
 
 def _build_pipeline(tmp_path: Path) -> RemediationPipeline:
     """Construct a RemediationPipeline with external services stubbed out."""
@@ -153,15 +155,11 @@ class TestEndToEndFakeIncident:
         pipeline = _build_pipeline(tmp_path)
         incident = _make_incident()
 
-        with patch.object(
-            pipeline._engine, "suggest_fix", return_value=_make_suggestion()
-        ):
+        with patch.object(pipeline._engine, "suggest_fix", return_value=_make_suggestion()):
             with patch.object(
                 pipeline._policy, "check", wraps=pipeline._policy.check
             ) as mock_policy:
-                with patch.object(
-                    pipeline._runner, "apply", return_value=MagicMock(success=True)
-                ):
+                with patch.object(pipeline._runner, "apply", return_value=MagicMock(success=True)):
                     with patch.object(
                         pipeline._runner,
                         "run_tests",
@@ -176,9 +174,7 @@ class TestEndToEndFakeIncident:
         incident = _make_incident()
 
         with patch.object(pipeline._engine, "suggest_fix", return_value=_make_suggestion()):
-            with patch.object(
-                pipeline._runner, "apply", return_value=MagicMock(success=True)
-            ):
+            with patch.object(pipeline._runner, "apply", return_value=MagicMock(success=True)):
                 with patch.object(
                     pipeline._runner,
                     "run_tests",
@@ -193,9 +189,7 @@ class TestEndToEndFakeIncident:
         incident = _make_incident()
 
         with patch.object(pipeline._engine, "suggest_fix", return_value=_make_suggestion()):
-            with patch.object(
-                pipeline._runner, "apply", return_value=MagicMock(success=True)
-            ):
+            with patch.object(pipeline._runner, "apply", return_value=MagicMock(success=True)):
                 with patch.object(
                     pipeline._runner,
                     "run_tests",
@@ -222,9 +216,7 @@ class TestEndToEndFakeIncident:
         pipeline = _build_pipeline(tmp_path)
         incident = _make_incident()
 
-        with patch.object(
-            pipeline._engine, "suggest_fix", side_effect=RuntimeError("LLM timeout")
-        ):
+        with patch.object(pipeline._engine, "suggest_fix", side_effect=RuntimeError("LLM timeout")):
             result = pipeline.run(incident)
 
         assert result.failure_reason is not None
@@ -236,9 +228,7 @@ class TestEndToEndFakeIncident:
         incident = _make_incident()
 
         with patch.object(pipeline._engine, "suggest_fix", return_value=_make_suggestion()):
-            with patch.object(
-                pipeline._runner, "apply", return_value=MagicMock(success=True)
-            ):
+            with patch.object(pipeline._runner, "apply", return_value=MagicMock(success=True)):
                 with patch.object(
                     pipeline._runner,
                     "run_tests",
