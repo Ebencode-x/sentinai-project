@@ -191,7 +191,7 @@ class RemediationPipeline:
                 return result
 
             result.patch_applied = True
-            result.sandbox_enforced = isinstance(self._runner, SandboxedPatchRunner)
+            result.sandbox_enforced = type(self._runner).__name__ == "SandboxedPatchRunner"
 
             # Stage 3 — Run tests
             logger.info("[Pipeline] Stage 3: running pytest")
