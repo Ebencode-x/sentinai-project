@@ -10,15 +10,12 @@ Assertions confirm every stage fires and output flows correctly.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.pipeline import PipelineResult, RemediationPipeline
-
 
 # ---------------------------------------------------------------------------
 # Fake incident factory
@@ -36,7 +33,7 @@ def _make_incident(
 ) -> LogIncident:
     return LogIncident(
         incident_id="test-incident-c3-001",
-        detected_at_utc=datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        detected_at_utc=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
         severity="critical",
         trigger_line=trigger_line,
         stacktrace=stacktrace,
@@ -156,8 +153,12 @@ class TestEndToEndFakeIncident:
         pipeline = _build_pipeline(tmp_path)
         incident = _make_incident()
 
-        with patch.object(pipeline._engine, "suggest_fix", return_value=_make_suggestion()):
-            with patch.object(pipeline._policy, "check", wraps=pipeline._policy.check) as mock_policy:
+        with patch.object(
+            pipeline._engine, "suggest_fix", return_value=_make_suggestion()
+        ):
+            with patch.object(
+                pipeline._policy, "check", wraps=pipeline._policy.check
+            ) as mock_policy:
                 with patch.object(
                     pipeline._runner, "apply", return_value=MagicMock(success=True)
                 ):
@@ -253,7 +254,9 @@ class TestEndToEndFakeIncident:
         incident = _make_incident()
 
         with patch.object(
-            pipeline._engine, "suggest_fix", return_value=_make_suggestion(proposed_patch=None, patch_file=None)
+            pipeline._engine,
+            "suggest_fix",
+            return_value=_make_suggestion(proposed_patch=None, patch_file=None),
         ):
             result = pipeline.run(incident)
 
