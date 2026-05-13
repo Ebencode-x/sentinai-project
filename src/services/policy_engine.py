@@ -21,7 +21,14 @@ from typing import Any
 
 import yaml
 
+from src.services.patch_semantic_validator import (
+    PatchSemanticValidator,
+)
+
 logger = logging.getLogger(__name__)
+
+# Module-level singleton — one validator instance, zero re-init cost.
+_semantic_validator = PatchSemanticValidator()
 
 _DEFAULT_POLICY = Path(__file__).resolve().parent.parent.parent / "sentinai-policy.yml"
 
@@ -122,7 +129,34 @@ class PatchPolicyEngine:
             reasons.append(f"patch too large: {patch_lines} lines > {max_lines}")
             return PolicyResult(decision=Decision.BLOCK, reasons=tuple(reasons), risk_tier="high")
 
-        # 6 — risk tier classification
+        # 6 — semantic AST analysis (D1)
+        semantic = _semantic_validator.validate(patch)
+        if semantic.has_critical:
+            for v in semantic.critical_violations:
+                reasons.append(f"semantic:{v.code}: {v.message}")
+            logger.warning(
+                "[Policy] Semantic BLOCK — %d critical violation(s)",
+                len(semantic.critical_violations),
+            )
+            return PolicyResult(
+                decision=Decision.BLOCK,
+                reasons=tuple(reasons),
+                risk_tier="critical",
+            )
+        if semantic.has_high:
+            for v in semantic.high_violations:
+                reasons.append(f"semantic:{v.code}: {v.message}")
+            logger.info(
+                "[Policy] Semantic REVIEW — %d high violation(s)",
+                len(semantic.high_violations),
+            )
+            return PolicyResult(
+                decision=Decision.REVIEW,
+                reasons=tuple(reasons),
+                risk_tier="high",
+            )
+
+        # 7 — risk tier classification
         tier, tier_reasons = self._classify_risk(patch_file, patch)
         reasons.extend(tier_reasons)
 
