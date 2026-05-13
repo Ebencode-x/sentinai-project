@@ -42,6 +42,8 @@ class PipelineResult:
     redactions_output_count: int = 0
     # C2 — sandbox telemetry
     sandbox_enforced: bool = False
+    # D2 — True when sandbox unavailable and execution was blocked
+    sandbox_blocked: bool = False
 
 
 @dataclass
@@ -64,14 +66,18 @@ class RemediationPipeline:
         try:
             self._runner = SandboxedPatchRunner(project_root=self.project_root)
             self._fallback_runner = self._runner._fallback
+            self._sandbox_available = True
             logger.info("[Pipeline] SandboxedPatchRunner initialised (C2)")
         except Exception as exc:
             logger.warning(
-                "[Pipeline] SandboxedPatchRunner unavailable — using PatchRunner: %s", exc
+                "[Pipeline] SandboxedPatchRunner init failed -- "
+                "patch execution will be blocked at runtime (D2): %s",
+                exc,
             )
             plain = PatchRunner(project_root=self.project_root)
             self._runner = plain  # type: ignore[assignment]
             self._fallback_runner = plain
+            self._sandbox_available = False
         policy_kwargs = {}
         if self.policy_path is not None:
             policy_kwargs["policy_path"] = self.policy_path
@@ -193,10 +199,28 @@ class RemediationPipeline:
             result.patch_applied = True
             result.sandbox_enforced = type(self._runner).__name__ == "SandboxedPatchRunner"
 
-            # Stage 3 — Run tests
+            # Stage 3 — Run tests (D2: blocked if sandbox unavailable)
             logger.info("[Pipeline] Stage 3: running pytest")
+            if not getattr(self, "_sandbox_available", True):
+                result.sandbox_blocked = True
+                result.patch_applied = False
+                result.failure_reason = (
+                    "[D2] Sandbox unavailable -- patch execution blocked. "
+                    "Docker is required for safe patch execution in production."
+                )
+                logger.error("[Pipeline] D2 block: sandbox unavailable.")
+                self._record_audit(result)
+                return result
             test_result = self._runner.run_tests(workspace=Path(tmpdir))
             result.tests_passed = test_result.success
+            # D2 -- detect sandbox block sentinel
+            if test_result.returncode == -2:
+                result.sandbox_blocked = True
+                result.patch_applied = False
+                result.failure_reason = test_result.output
+                logger.error("[Pipeline] D2 block: %s", test_result.output)
+                self._record_audit(result)
+                return result
 
             if not test_result.success:
                 result.failure_reason = (

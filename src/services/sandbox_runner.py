@@ -56,10 +56,31 @@ class SandboxedPatchRunner:
         )
 
     def run_tests(self, workspace: Path) -> TestResult:
-        """Run pytest inside Docker container if available, else host fallback."""
+        """Run pytest inside Docker container.
+
+        D2: Docker unavailable + allow_host_fallback=False -> BLOCK.
+        Patches are never executed on the host machine in production.
+        """
         if not self._docker_available:
-            logger.warning("Docker unavailable — running tests on host (no isolation).")
-            return self._fallback.run_tests(workspace=workspace)
+            if self.config.allow_host_fallback:
+                logger.warning(
+                    "[Sandbox] Docker unavailable -- host fallback ENABLED "
+                    "(allow_host_fallback=True). Not safe for production."
+                )
+                return self._fallback.run_tests(workspace=workspace)
+            logger.error(
+                "[Sandbox] Docker unavailable and allow_host_fallback=False -- "
+                "blocking patch execution (D2)."
+            )
+            return TestResult(
+                success=False,
+                output=(
+                    "[SANDBOX BLOCKED] Docker is required for isolated patch "
+                    "execution. The patch was NOT run on the host machine. "
+                    "Install Docker or set allow_host_fallback=True for dev use."
+                ),
+                returncode=-2,
+            )
         self._enforcer.enforce(self.config)
         return self._run_in_container(workspace)
 
