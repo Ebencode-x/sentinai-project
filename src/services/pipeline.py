@@ -13,6 +13,7 @@ from src.integrations.llm_client import build_llm_client
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.patch_runner import PatchRunner
 from src.services.policy_engine import Decision, PatchPolicyEngine
+from src.services.prompt_injection_detector import scan_incident_fields
 from src.services.remediation_engine import RemediationEngine
 from src.services.sandbox_runner import SandboxedPatchRunner
 from src.services.secret_sanitizer import SecretSanitizer
@@ -44,6 +45,8 @@ class PipelineResult:
     sandbox_enforced: bool = False
     # D2 — True when sandbox unavailable and execution was blocked
     sandbox_blocked: bool = False
+    # D3 — True when prompt injection was detected and pipeline was blocked
+    injection_blocked: bool = False
 
 
 @dataclass
@@ -110,6 +113,31 @@ class RemediationPipeline:
         result.redactions_input_count = redactions_in
         if redactions_in:
             logger.warning("[Pipeline] %d secret(s) redacted from incident input", redactions_in)
+
+        # ----------------------------------------------------------------
+        # Stage 0b — Prompt Injection Detection (D3)
+        # ----------------------------------------------------------------
+        logger.info("[Pipeline] Stage 0b: scanning for prompt injection")
+        _inj = scan_incident_fields(
+            {
+                "trigger_line": incident.trigger_line,
+                "stacktrace": incident.stacktrace or "",
+                "context_before_error": incident.context_before_error or "",
+            }
+        )
+        if _inj.is_injection:
+            labels = ", ".join(dict.fromkeys(_inj.labels))
+            result.failure_reason = (
+                f"[D3] Prompt injection detected in field '{_inj.flagged_field}': {labels}"
+            )
+            result.injection_blocked = True
+            logger.warning(
+                "[Pipeline] D3 block: injection detected — field=%s labels=%s",
+                _inj.flagged_field,
+                labels,
+            )
+            self._record_audit(result)
+            return result
 
         # ----------------------------------------------------------------
         # Stage 1 — Generate suggestion via LLM
