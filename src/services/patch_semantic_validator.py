@@ -1,28 +1,20 @@
-"""AST Semantic Patch Validator — D1.
+"""D1 — Patch Semantic Validator.
 
-Performs deep structural analysis of AI-proposed patches beyond simple
-pattern matching. Parses Python source using the standard ``ast`` module
-to detect:
+Performs AST-level static analysis on AI-proposed Python patches before
+they reach the policy gate.  Pure ``ast`` module — no third-party deps,
+no subprocess, no I/O.
 
-  - Auth/authorization bypasses  (if True:, hardcoded roles)
-  - Privilege escalation patterns (is_admin = True, role overrides)
-  - Dangerous taint flows         (user input → exec/eval/subprocess)
-  - Hardcoded secrets             (password = "...", token = "...")
-  - Security control removal      (deletion of auth/permission checks)
-  - Comparison weakening          (== replaced with ``is`` on booleans,
-                                   ``not`` guards removed)
+Rule sets
+---------
+AUTH   — authentication / authorisation bypass patterns
+PRIV   — privilege escalation (os, subprocess, file-system abuse)
+SEC    — secrets / crypto misuse
+TAINT  — untrusted data flowing into dangerous sinks
 
-Architecture
-------------
-SemanticViolation   — immutable finding (severity + message + line)
-SemanticResult      — aggregated findings for one analysis run
-PatchSemanticValidator — main entry point; accepts raw unified-diff text
-
-Integration
------------
-Called by PatchPolicyEngine.check() as step 7 — after pattern checks,
-before the final ALLOW decision.  Any CRITICAL finding escalates the
-decision to BLOCK; any HIGH finding escalates to REVIEW.
+Severity model
+--------------
+CRITICAL  → automatic BLOCK  (mapped in policy_engine.py)
+HIGH      → automatic REVIEW
 """
 
 from __future__ import annotations
@@ -38,55 +30,47 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Domain types
+# Severity + Violation
 # ---------------------------------------------------------------------------
 
 
 class Severity(StrEnum):
-    CRITICAL = "critical"  # → BLOCK immediately
-    HIGH = "high"  # → REVIEW required
-    MEDIUM = "medium"  # → flagged, logged
-    LOW = "low"  # → informational
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 @dataclass(frozen=True)
 class SemanticViolation:
-    """A single detected security issue."""
+    """One detected policy violation."""
 
-    severity: Severity
     code: str  # e.g. "AUTH001"
-    message: str
-    line: int | None = None
-    node_type: str | None = None
+    message: str  # human-readable description
+    severity: Severity
+    lineno: int  # 1-based, best-effort
+    col_offset: int = 0
+    rule_set: str = ""  # AUTH | PRIV | SEC | TAINT
 
     def __str__(self) -> str:
-        loc = f" (line {self.line})" if self.line else ""
-        return f"[{self.severity.upper()}] {self.code}{loc}: {self.message}"
+        return f"[{self.code}] line {self.lineno}: {self.message}"
+
+
+# ---------------------------------------------------------------------------
+# Validation result
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class SemanticResult:
-    """Aggregated result of one semantic analysis run."""
+class SemanticValidationResult:
+    """Aggregated result returned to the policy engine."""
 
     violations: list[SemanticViolation] = field(default_factory=list)
-    parse_errors: list[str] = field(default_factory=list)
-    analysed_lines: int = 0
+    parse_error: str | None = None  # set when AST parse itself fails
 
     # ------------------------------------------------------------------
-    # Convenience properties
+    # Convenience filters (policy_engine.py uses these)
     # ------------------------------------------------------------------
-
-    @property
-    def has_critical(self) -> bool:
-        return any(v.severity is Severity.CRITICAL for v in self.violations)
-
-    @property
-    def has_high(self) -> bool:
-        return any(v.severity is Severity.HIGH for v in self.violations)
-
-    @property
-    def is_clean(self) -> bool:
-        return not self.violations and not self.parse_errors
 
     @property
     def critical_violations(self) -> list[SemanticViolation]:
@@ -97,571 +81,802 @@ class SemanticResult:
         return [v for v in self.violations if v.severity is Severity.HIGH]
 
     @property
-    def summary(self) -> str:
-        if self.is_clean:
-            return "No semantic violations detected."
-        parts = []
-        counts = {}
-        for v in self.violations:
-            counts[v.severity] = counts.get(v.severity, 0) + 1
-        for sev in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW):
-            if sev in counts:
-                parts.append(f"{counts[sev]} {sev}")
-        if self.parse_errors:
-            parts.append(f"{len(self.parse_errors)} parse error(s)")
-        return "Semantic violations: " + ", ".join(parts)
+    def has_critical(self) -> bool:
+        return bool(self.critical_violations)
 
-    def all_messages(self) -> list[str]:
-        return [str(v) for v in self.violations] + [f"[PARSE ERROR] {e}" for e in self.parse_errors]
+    @property
+    def has_high(self) -> bool:
+        return bool(self.high_violations)
+
+    @property
+    def is_clean(self) -> bool:
+        return not self.violations and self.parse_error is None
+
+    def __len__(self) -> int:
+        return len(self.violations)
 
 
 # ---------------------------------------------------------------------------
-# AST visitor — core analysis engine
+# Base rule
 # ---------------------------------------------------------------------------
 
-# Security-sensitive identifiers — any assignment/comparison involving
-# these names triggers deeper inspection.
-_AUTH_NAMES: frozenset[str] = frozenset(
-    {
-        "is_admin",
-        "is_superuser",
-        "is_staff",
-        "is_authenticated",
-        "has_permission",
-        "role",
-        "roles",
-        "user_role",
-        "permission",
-        "permissions",
-        "access_level",
-        "privilege",
-        "privileges",
-        "authorized",
-        "allow",
-        "allowed",
-        "can_access",
-        "user_type",
-        "admin",
-        "superuser",
-    }
-)
 
-# Identifiers whose values must never be hardcoded in patches.
-_SECRET_NAMES: frozenset[str] = frozenset(
-    {
-        "password",
-        "passwd",
-        "secret",
-        "token",
-        "api_key",
-        "apikey",
-        "auth_token",
-        "access_token",
-        "refresh_token",
-        "private_key",
-        "signing_key",
-        "encryption_key",
-        "credentials",
-        "credential",
-        "jwt_secret",
-        "session_key",
-        "secret_key",
-    }
-)
+class _Rule(ast.NodeVisitor):
+    """Base class for all D1 rules.
 
-# Functions whose call with unsanitised input constitutes a taint sink.
-_TAINT_SINKS: frozenset[str] = frozenset(
-    {
-        "eval",
-        "exec",
-        "compile",
-        "os.system",
-        "subprocess.call",
-        "subprocess.run",
-        "subprocess.Popen",
-        "open",
-        "pickle.loads",
-        "yaml.load",
-        "marshal.loads",
-        "__import__",
-        "importlib.import_module",
-    }
-)
+    Each subclass implements visit_* methods and appends to
+    ``self._violations``.  Call ``run(tree)`` to execute.
+    """
 
-# Variable names that represent user-controlled / untrusted input.
-_TAINT_SOURCES: frozenset[str] = frozenset(
-    {
-        "request",
-        "input",
-        "user_input",
-        "query",
-        "params",
-        "args",
-        "kwargs",
-        "data",
-        "body",
-        "form",
-        "payload",
-        "raw",
-        "content",
-        "message",
-        "cmd",
-        "command",
-        "user_data",
-        "user_query",
-    }
-)
-
-
-class _SecurityVisitor(ast.NodeVisitor):
-    """Walk an AST and collect semantic security violations."""
+    rule_set: str = ""
 
     def __init__(self) -> None:
-        self.violations: list[SemanticViolation] = []
-        # Tracks names assigned from taint sources in current scope.
-        self._tainted: set[str] = set()
+        self._violations: list[SemanticViolation] = []
+
+    def run(self, tree: ast.AST) -> list[SemanticViolation]:
+        self.visit(tree)
+        return list(self._violations)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def _add(
-        self,
-        severity: Severity,
-        code: str,
-        message: str,
-        node: ast.AST | None = None,
-    ) -> None:
-        line = getattr(node, "lineno", None)
-        node_type = type(node).__name__ if node else None
-        self.violations.append(
-            SemanticViolation(
-                severity=severity,
-                code=code,
-                message=message,
-                line=line,
-                node_type=node_type,
-            )
-        )
-
-    def _name_of(self, node: ast.expr) -> str | None:
-        """Best-effort extraction of a simple name from an expression."""
+    @staticmethod
+    def _name(node: ast.expr) -> str:
+        """Best-effort string representation of a call target."""
+        if isinstance(node, ast.Attribute):
+            return f"{_Rule._name(node.value)}.{node.attr}"
         if isinstance(node, ast.Name):
             return node.id
-        if isinstance(node, ast.Attribute):
-            return node.attr
-        return None
-
-    def _is_literal_true(self, node: ast.expr) -> bool:
-        return isinstance(node, ast.Constant) and node.value is True
-
-    def _is_literal_false(self, node: ast.expr) -> bool:
-        return isinstance(node, ast.Constant) and node.value is False
-
-    def _is_nonempty_string(self, node: ast.expr) -> bool:
-        return isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value
-
-    def _call_name(self, node: ast.Call) -> str:
-        """Return dotted name of a Call node, e.g. 'subprocess.Popen'."""
-        func = node.func
-        if isinstance(func, ast.Name):
-            return func.id
-        if isinstance(func, ast.Attribute):
-            parts = []
-            cur: ast.expr = func
-            while isinstance(cur, ast.Attribute):
-                parts.append(cur.attr)
-                cur = cur.value
-            if isinstance(cur, ast.Name):
-                parts.append(cur.id)
-            return ".".join(reversed(parts))
         return ""
 
-    def _arg_contains_taint(self, node: ast.Call) -> bool:
-        """Check if any argument to a call originates from a taint source."""
-        for arg in node.args:
-            if isinstance(arg, ast.Name) and (arg.id in _TAINT_SOURCES or arg.id in self._tainted):
-                return True
-        for kw in node.keywords:
-            if isinstance(kw.value, ast.Name) and (
-                kw.value.id in _TAINT_SOURCES or kw.value.id in self._tainted
-            ):
-                return True
-        return False
+    @staticmethod
+    def _str_value(node: ast.expr) -> str | None:
+        """Return the string value of a Constant node, else None."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
 
-    # ------------------------------------------------------------------
-    # Visitor methods
-    # ------------------------------------------------------------------
-
-    def visit_If(self, node: ast.If) -> None:
-        """Detect hardcoded True/False conditions on auth-sensitive guards."""
-        test = node.test
-
-        # AUTH001 — if True: (always-true bypass)
-        if self._is_literal_true(test):
-            self._add(
-                Severity.CRITICAL,
-                "AUTH001",
-                "Hardcoded 'if True:' — unconditional execution bypass detected.",
-                node,
-            )
-
-        # AUTH002 — if False: (dead code removal of security guard)
-        elif self._is_literal_false(test):
-            self._add(
-                Severity.HIGH,
-                "AUTH002",
-                "Hardcoded 'if False:' — security guard may be permanently disabled.",
-                node,
-            )
-
-        # AUTH003 — if not <auth_name>: pattern reversal
-        elif isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
-            name = self._name_of(test.operand)
-            if name and name.lower() in _AUTH_NAMES:
-                self._add(
-                    Severity.CRITICAL,
-                    "AUTH003",
-                    f"Inverted auth guard: 'if not {name}:' — permission logic may be reversed.",
-                    node,
-                )
-
-        self.generic_visit(node)
-
-    def visit_Assign(self, node: ast.Assign) -> None:
-        """Detect privilege escalation and hardcoded secret assignments."""
-        for target in node.targets:
-            name = self._name_of(target)
-            if name is None:
-                continue
-
-            name_lower = name.lower()
-
-            # PRIV001 — is_admin = True (direct privilege escalation)
-            if name_lower in _AUTH_NAMES and self._is_literal_true(node.value):
-                self._add(
-                    Severity.CRITICAL,
-                    "PRIV001",
-                    f"Privilege escalation: '{name} = True' — hardcoded permission grant detected.",
-                    node,
-                )
-
-            # PRIV002 — role = "admin" (hardcoded role assignment)
-            elif name_lower in _AUTH_NAMES and self._is_nonempty_string(node.value):
-                value = node.value.s if hasattr(node.value, "s") else node.value.value
-                if any(
-                    priv in str(value).lower()
-                    for priv in ("admin", "superuser", "root", "staff", "god")
-                ):
-                    self._add(
-                        Severity.CRITICAL,
-                        "PRIV002",
-                        f"Hardcoded privileged role: '{name} = {value!r}'.",
-                        node,
-                    )
-
-            # SEC001 — hardcoded secret value
-            elif name_lower in _SECRET_NAMES and self._is_nonempty_string(node.value):
-                self._add(
-                    Severity.CRITICAL,
-                    "SEC001",
-                    f"Hardcoded secret: '{name}' assigned a literal string value. "
-                    "Secrets must come from environment variables or a vault.",
-                    node,
-                )
-
-            # Taint propagation — track assignments from taint sources
-            if isinstance(node.value, ast.Name) and node.value.id in _TAINT_SOURCES:
-                if name:
-                    self._tainted.add(name)
-
-        self.generic_visit(node)
-
-    def visit_AugAssign(self, node: ast.AugAssign) -> None:
-        """Detect augmented assignments on auth fields (e.g. permissions |= ADMIN)."""
-        name = self._name_of(node.target)
-        if name and name.lower() in _AUTH_NAMES:
-            self._add(
-                Severity.HIGH,
-                "PRIV003",
-                f"Augmented assignment on security field '{name}' — "
-                "verify this does not grant unintended privileges.",
-                node,
-            )
-        self.generic_visit(node)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        """Detect dangerous sink calls and tainted argument flows."""
-        call_name = self._call_name(node)
-
-        # TAINT001 — taint source flowing into dangerous sink
-        if call_name in _TAINT_SINKS and self._arg_contains_taint(node):
-            self._add(
-                Severity.CRITICAL,
-                "TAINT001",
-                f"Taint flow: user-controlled input reaches dangerous sink "
-                f"'{call_name}'. Potential injection vulnerability.",
-                node,
-            )
-
-        # TAINT002 — dangerous sink called without obvious sanitization
-        elif call_name in _TAINT_SINKS:
-            self._add(
-                Severity.HIGH,
-                "TAINT002",
-                f"Dangerous function call: '{call_name}' — "
-                "verify all arguments are sanitized before use.",
-                node,
-            )
-
-        self.generic_visit(node)
-
-    def visit_Compare(self, node: ast.Compare) -> None:
-        """Detect weakened comparisons on auth values."""
-        left_name = self._name_of(node.left)
-        if left_name and left_name.lower() in _AUTH_NAMES:
-            for op, comparator in zip(node.ops, node.comparators):
-                # AUTH004 — auth_field is True (identity instead of equality)
-                if isinstance(op, ast.Is) and self._is_literal_true(comparator):
-                    self._add(
-                        Severity.MEDIUM,
-                        "AUTH004",
-                        f"Identity comparison '{left_name} is True' — "
-                        "use explicit boolean checks for security conditions.",
-                        node,
-                    )
-                # AUTH005 — auth_field == 0 / "" (falsy bypass)
-                elif isinstance(op, ast.Eq) and isinstance(comparator, ast.Constant):
-                    if comparator.value in (0, "", None, False):
-                        self._add(
-                            Severity.HIGH,
-                            "AUTH005",
-                            f"Auth field '{left_name}' compared to falsy value "
-                            f"'{comparator.value!r}' — potential bypass.",
-                            node,
-                        )
-        self.generic_visit(node)
-
-    def visit_Delete(self, node: ast.Delete) -> None:
-        """Detect deletion of security-sensitive attributes."""
-        for target in node.targets:
-            name = self._name_of(target)
-            if name and name.lower() in _AUTH_NAMES | _SECRET_NAMES:
-                self._add(
-                    Severity.HIGH,
-                    "SEC002",
-                    f"Deletion of security-sensitive attribute '{name}' detected.",
-                    node,
-                )
-        self.generic_visit(node)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Detect security decorator removal patterns."""
-        # Look for functions named like auth guards with no decorators
-        name_lower = node.name.lower()
-        is_auth_func = any(
-            kw in name_lower
-            for kw in (
-                "auth",
-                "permission",
-                "login_required",
-                "require",
-                "check_access",
-                "verify",
-                "validate_token",
+    def _add(
+        self,
+        code: str,
+        message: str,
+        severity: Severity,
+        node: ast.AST,
+    ) -> None:
+        self._violations.append(
+            SemanticViolation(
+                code=code,
+                message=message,
+                severity=severity,
+                lineno=getattr(node, "lineno", 0),
+                col_offset=getattr(node, "col_offset", 0),
+                rule_set=self.rule_set,
             )
         )
-        if is_auth_func and not node.decorator_list:
-            # Only flag if the body is trivially bypassed
-            body = node.body
-            if len(body) == 1:
-                stmt = body[0]
-                # def require_auth(): return True
-                if (
-                    isinstance(stmt, ast.Return)
-                    and stmt.value is not None
-                    and self._is_literal_true(stmt.value)
-                ):
+
+
+# ===========================================================================
+# AUTH rule set
+# ===========================================================================
+
+
+class _AuthRules(_Rule):
+    """AUTH — authentication / authorisation bypass detection."""
+
+    rule_set = "AUTH"
+
+    # Calls that unconditionally disable auth checks
+    _DISABLED_AUTH_CALLS: frozenset[str] = frozenset(
+        {
+            # Flask-Login / Django decorators removed at call sites
+            "login_required",
+            "permission_required",
+            "require_http_methods",
+            # Django REST Framework
+            "IsAuthenticated",
+            "IsAdminUser",
+            # JWT helpers
+            "jwt_required",
+            "verify_jwt_in_request",
+            # Generic
+            "check_auth",
+            "authenticate",
+            "authorize",
+            "require_role",
+        }
+    )
+
+    # Keyword argument names that are used to bypass auth
+    _BYPASS_KWARGS: frozenset[str] = frozenset(
+        {
+            "skip_auth",
+            "bypass_auth",
+            "disable_auth",
+            "no_auth",
+            "unauthenticated",
+            "anonymous",
+        }
+    )
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        name = self._name(node.func)
+
+        # AUTH001 — dangerous bypass kwargs set to True
+        for kw in node.keywords:
+            if kw.arg in self._BYPASS_KWARGS:
+                # flag when explicitly True or truthy non-False constant
+                if isinstance(kw.value, ast.Constant) and kw.value.value not in (False, 0, None):
                     self._add(
+                        "AUTH001",
+                        f"Potentially disabling auth check via kwarg '{kw.arg}=True'",
                         Severity.CRITICAL,
-                        "AUTH006",
-                        f"Security function '{node.name}' always returns True — "
-                        "authentication/authorization completely bypassed.",
                         node,
                     )
-                # def require_auth(): pass
-                elif isinstance(stmt, ast.Pass):
+
+        # AUTH002 — hardcoded credentials passed to auth calls
+        for arg in node.args:
+            s = self._str_value(arg)
+            if s and _looks_like_hardcoded_credential(s):
+                self._add(
+                    "AUTH002",
+                    f"Hardcoded credential string passed to '{name}()'",
+                    Severity.CRITICAL,
+                    node,
+                )
+
+        self.generic_visit(node)
+
+    def visit_Compare(self, node: ast.Compare) -> None:  # noqa: N802
+        # AUTH003 — `if password == "hardcoded"` style comparisons
+        for comparator in node.comparators:
+            s = self._str_value(comparator)
+            if s and _looks_like_hardcoded_credential(s):
+                self._add(
+                    "AUTH003",
+                    "Hardcoded credential used in comparison — timing-safe compare required",
+                    Severity.HIGH,
+                    node,
+                )
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+        self._check_decorator_removal(node)
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
+        self._check_decorator_removal(node)
+        self.generic_visit(node)
+
+    def _check_decorator_removal(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        # AUTH004 — function has no auth decorators but its name strongly
+        # implies it is a protected endpoint
+        _PROTECTED_NAMES = ("admin", "dashboard", "settings", "profile", "account")
+        if any(kw in node.name.lower() for kw in _PROTECTED_NAMES):
+            decorator_names = {self._name(d) for d in node.decorator_list}
+            if not decorator_names.intersection(self._DISABLED_AUTH_CALLS):
+                # Only flag if there are NO decorators at all — a patch that
+                # strips all decorators from a protected endpoint is suspicious.
+                if not node.decorator_list:
                     self._add(
+                        "AUTH004",
+                        f"Protected-looking endpoint '{node.name}' has no auth decorator",
                         Severity.HIGH,
-                        "AUTH007",
-                        f"Security function '{node.name}' is a no-op (pass only) — "
-                        "verify this is intentional.",
+                        node,
+                    )
+
+
+# ===========================================================================
+# PRIV rule set
+# ===========================================================================
+
+
+class _PrivRules(_Rule):
+    """PRIV — privilege escalation and dangerous system-level access."""
+
+    rule_set = "PRIV"
+
+    # (module_or_attr_prefix, severity, code, message)
+    _DANGEROUS_CALLS: tuple[tuple[str, Severity, str, str], ...] = (
+        # subprocess / shell execution
+        (
+            "subprocess.call",
+            Severity.CRITICAL,
+            "PRIV001",
+            "subprocess.call() with shell=True allows arbitrary code execution",
+        ),
+        (
+            "subprocess.run",
+            Severity.HIGH,
+            "PRIV002",
+            "subprocess.run() — verify no user-controlled input reaches this call",
+        ),
+        (
+            "subprocess.Popen",
+            Severity.HIGH,
+            "PRIV003",
+            "subprocess.Popen() — verify no user-controlled input reaches this call",
+        ),
+        (
+            "subprocess.check_output",
+            Severity.HIGH,
+            "PRIV004",
+            "subprocess.check_output() — verify no user-controlled input reaches this call",
+        ),
+        (
+            "os.system",
+            Severity.CRITICAL,
+            "PRIV005",
+            "os.system() executes shell commands — severe injection risk",
+        ),
+        (
+            "os.popen",
+            Severity.CRITICAL,
+            "PRIV006",
+            "os.popen() executes shell commands — use subprocess instead",
+        ),
+        (
+            "os.execv",
+            Severity.CRITICAL,
+            "PRIV007",
+            "os.execv() replaces the current process — extremely dangerous",
+        ),
+        (
+            "os.execve",
+            Severity.CRITICAL,
+            "PRIV008",
+            "os.execve() replaces the current process — extremely dangerous",
+        ),
+        # privilege bits
+        (
+            "os.chmod",
+            Severity.HIGH,
+            "PRIV009",
+            "os.chmod() — verify no world-writable bits (0o777) are set",
+        ),
+        (
+            "os.chown",
+            Severity.HIGH,
+            "PRIV010",
+            "os.chown() — changing file ownership may escalate privileges",
+        ),
+        (
+            "os.setuid",
+            Severity.CRITICAL,
+            "PRIV011",
+            "os.setuid() changes process UID — privilege escalation risk",
+        ),
+        (
+            "os.setgid",
+            Severity.CRITICAL,
+            "PRIV012",
+            "os.setgid() changes process GID — privilege escalation risk",
+        ),
+        # dynamic code execution
+        (
+            "eval",
+            Severity.CRITICAL,
+            "PRIV013",
+            "eval() executes arbitrary code — never pass user input",
+        ),
+        (
+            "exec",
+            Severity.CRITICAL,
+            "PRIV014",
+            "exec() executes arbitrary code — never pass user input",
+        ),
+        (
+            "compile",
+            Severity.HIGH,
+            "PRIV015",
+            "compile() + exec pattern — verify source is trusted",
+        ),
+        (
+            "__import__",
+            Severity.HIGH,
+            "PRIV016",
+            "__import__() dynamic import — verify module name is not user-controlled",
+        ),
+        (
+            "importlib.import_module",
+            Severity.HIGH,
+            "PRIV017",
+            "importlib.import_module() — verify module name is not user-controlled",
+        ),
+        # pickle / deserialization
+        (
+            "pickle.loads",
+            Severity.CRITICAL,
+            "PRIV018",
+            "pickle.loads() on untrusted data allows arbitrary code execution",
+        ),
+        (
+            "pickle.load",
+            Severity.CRITICAL,
+            "PRIV019",
+            "pickle.load() on untrusted data allows arbitrary code execution",
+        ),
+        (
+            "marshal.loads",
+            Severity.CRITICAL,
+            "PRIV020",
+            "marshal.loads() deserializes bytecode — only trust signed sources",
+        ),
+        (
+            "yaml.load",
+            Severity.CRITICAL,
+            "PRIV021",
+            "yaml.load() without Loader=yaml.SafeLoader allows code execution",
+        ),
+        # temp file abuse
+        (
+            "tempfile.mktemp",
+            Severity.HIGH,
+            "PRIV022",
+            "tempfile.mktemp() is insecure (TOCTOU) — use mkstemp() or NamedTemporaryFile()",
+        ),
+    )
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        name = self._name(node.func)
+
+        for prefix, severity, code, message in self._DANGEROUS_CALLS:
+            # Match exact full name OR bare function name — but require the
+            # bare suffix to be the *entire* local name (e.g. "load" must not
+            # match both "pickle.load" and "yaml.load" for the same call).
+            bare = prefix.split(".")[-1]
+            module = prefix.split(".")[0] if "." in prefix else ""
+            full_match = name == prefix
+            bare_match = name == bare or (
+                name.endswith(f".{bare}") and (not module or name.startswith(module))
+            )
+            if full_match or bare_match:
+                # subprocess with shell=True → CRITICAL, without → HIGH
+                _subprocess_calls = (
+                    "subprocess.run",
+                    "subprocess.Popen",
+                    "subprocess.call",
+                    "subprocess.check_output",
+                )
+                if prefix in _subprocess_calls:
+                    shell_true = any(
+                        kw.arg == "shell"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value is True
+                        for kw in node.keywords
+                    )
+                    effective_severity = Severity.CRITICAL if shell_true else severity
+                    effective_message = (
+                        message.replace("— verify", "with shell=True — arbitrary code execution")
+                        if shell_true
+                        else message
+                    )
+                    self._add(code, effective_message, effective_severity, node)
+                else:
+                    self._add(code, message, severity, node)
+                break
+
+        # PRIV023 — world-writable chmod literal
+        if name in ("os.chmod", "chmod"):
+            for arg in node.args[1:2]:  # second positional arg is mode
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, int):
+                    if arg.value & 0o002:  # world-writable bit
+                        self._add(
+                            "PRIV023",
+                            f"os.chmod() sets world-writable bit (mode=0o{arg.value:o})",
+                            Severity.CRITICAL,
+                            node,
+                        )
+
+        self.generic_visit(node)
+
+
+# ===========================================================================
+# SEC rule set
+# ===========================================================================
+
+
+class _SecRules(_Rule):
+    """SEC — secrets and cryptographic misuse."""
+
+    rule_set = "SEC"
+
+    # Weak / broken algorithms
+    _WEAK_ALGOS: frozenset[str] = frozenset({"md5", "sha1", "sha-1", "des", "rc4", "rc2"})
+
+    # Assignment targets that suggest secret storage in plain text
+    _SECRET_VAR_NAMES: frozenset[str] = frozenset(
+        {
+            "password",
+            "passwd",
+            "pwd",
+            "secret",
+            "secret_key",
+            "api_key",
+            "apikey",
+            "token",
+            "auth_token",
+            "access_token",
+            "private_key",
+            "signing_key",
+        }
+    )
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        name = self._name(node.func).lower()
+
+        # SEC001 — weak hash algorithm
+        if "hashlib" in name or name in ("md5", "sha1"):
+            for arg in node.args:
+                algo = self._str_value(arg)
+                if algo and algo.lower().replace("-", "") in {
+                    a.replace("-", "") for a in self._WEAK_ALGOS
+                }:
+                    self._add(
+                        "SEC001",
+                        f"Weak hash algorithm '{algo}' — use SHA-256 or stronger",
+                        Severity.HIGH,
+                        node,
+                    )
+            # Direct call e.g. hashlib.md5(...)
+            for algo in self._WEAK_ALGOS:
+                if name.endswith(algo.replace("-", "")):
+                    self._add(
+                        "SEC001",
+                        f"Weak hash algorithm '{algo}' — use SHA-256 or stronger",
+                        Severity.HIGH,
+                        node,
+                    )
+
+        # SEC002 — random used for security-sensitive purpose
+        if name in (
+            "random.random",
+            "random.randint",
+            "random.choice",
+            "random.randrange",
+            "random.uniform",
+        ):
+            self._add(
+                "SEC002",
+                f"'{name}' is not cryptographically secure — use secrets module",
+                Severity.HIGH,
+                node,
+            )
+
+        # SEC003 — ssl verification disabled
+        if name in (
+            "requests.get",
+            "requests.post",
+            "requests.put",
+            "requests.delete",
+            "requests.request",
+            "requests.session",
+        ):
+            for kw in node.keywords:
+                if kw.arg == "verify" and isinstance(kw.value, ast.Constant) and not kw.value.value:
+                    self._add(
+                        "SEC003",
+                        "SSL verification disabled (verify=False) — MITM attack risk",
+                        Severity.CRITICAL,
+                        node,
+                    )
+
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+        # SEC004 — hardcoded secret assigned to a sensitive variable
+        value_str = self._str_value(node.value)
+        if value_str and _looks_like_hardcoded_credential(value_str):
+            for target in node.targets:
+                target_name = self._name(target).lower()
+                if any(kw in target_name for kw in self._SECRET_VAR_NAMES):
+                    self._add(
+                        "SEC004",
+                        (
+                            f"Hardcoded secret assigned to '{self._name(target)}'"
+                            " — use env vars or a vault"
+                        ),
+                        Severity.CRITICAL,
                         node,
                     )
         self.generic_visit(node)
 
-    # Also handle async def
-    visit_AsyncFunctionDef = visit_FunctionDef
+    def visit_keyword(self, node: ast.keyword) -> None:  # noqa: N802
+        # SEC005 — secret passed as keyword argument
+        if node.arg and any(kw in node.arg.lower() for kw in self._SECRET_VAR_NAMES):
+            s = self._str_value(node.value)
+            if s and _looks_like_hardcoded_credential(s):
+                self._add(
+                    "SEC005",
+                    f"Hardcoded secret in keyword argument '{node.arg}'",
+                    Severity.CRITICAL,
+                    node,
+                )
+        self.generic_visit(node)
 
 
-# ---------------------------------------------------------------------------
-# Patch parser — extract added lines from unified diff
-# ---------------------------------------------------------------------------
-
-_DIFF_ADDED_RE = re.compile(r"^\+(?!\+\+)")  # lines starting with + but not +++
+# ===========================================================================
+# TAINT rule set
+# ===========================================================================
 
 
-def _extract_added_lines(patch: str) -> tuple[str, int]:
-    """Extract lines added by the patch (+ prefix) as a single source string.
+class _TaintRules(_Rule):
+    """TAINT — untrusted data flowing into dangerous sinks.
 
-    Returns (source_code, line_count).
-    The returned source is re-numbered starting from 1 so AST line numbers
-    are meaningful relative to the added block.
+    Lightweight single-pass taint: any name that originates from a
+    *source* (request, user_input, environ) and is directly passed
+    (without any sanitization call in between) to a *sink* is flagged.
+
+    This is intentionally conservative — false negatives are acceptable,
+    false positives are not, because every flag causes a REVIEW, not an
+    auto-block.
     """
-    added: list[str] = []
+
+    rule_set = "TAINT"
+
+    # Sources — call expressions whose return values carry taint
+    _TAINT_SOURCES: frozenset[str] = frozenset(
+        {
+            # HTTP request objects (Flask / Django / FastAPI / Starlette)
+            "request.args.get",
+            "request.form.get",
+            "request.json",
+            "request.get_json",
+            "request.data",
+            "request.values.get",
+            "request.cookies.get",
+            "request.headers.get",
+            # Django specifics
+            "request.GET.get",
+            "request.POST.get",
+            # FastAPI / Pydantic body
+            "Body",
+            "Query",
+            "Path",
+            "Header",
+            "Cookie",
+            # Generic user / env input
+            "input",
+            "os.environ.get",
+            "os.getenv",
+            "sys.argv",
+        }
+    )
+
+    # Sinks — call expressions that are dangerous when tainted
+    _TAINT_SINKS: frozenset[str] = frozenset(
+        {
+            # SQL
+            "execute",
+            "cursor.execute",
+            "db.execute",
+            "session.execute",
+            "connection.execute",
+            "conn.execute",
+            # Shell
+            "os.system",
+            "subprocess.call",
+            "subprocess.run",
+            "subprocess.Popen",
+            "subprocess.check_output",
+            "os.popen",
+            # Template rendering
+            "render_template_string",
+            "jinja2.Template",
+            "Template",
+            "Markup",
+            # Eval / exec
+            "eval",
+            "exec",
+            # File ops
+            "open",
+            "Path",
+            # HTTP redirect
+            "redirect",
+        }
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._tainted: set[str] = set()
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+        """Track assignments from taint sources."""
+        if isinstance(node.value, ast.Call):
+            src = self._name(node.value.func)
+            in_sources = src in self._TAINT_SOURCES or any(
+                node.value.func and src.endswith(s.split(".")[-1]) for s in self._TAINT_SOURCES
+            )
+            if in_sources:
+                for target in node.targets:
+                    tname = self._name(target)
+                    if tname:
+                        self._tainted.add(tname)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        """Flag tainted variables flowing into sinks."""
+        sink = self._name(node.func)
+        is_sink = sink in self._TAINT_SINKS or any(
+            sink.endswith(f".{s.split('.')[-1]}") for s in self._TAINT_SINKS
+        )
+        if is_sink:
+            for arg in node.args:
+                arg_name = self._name(arg)
+                if arg_name and arg_name in self._tainted:
+                    self._add(
+                        "TAINT001",
+                        (
+                            f"Untrusted input '{arg_name}' flows into"
+                            f" sink '{sink}()' — sanitize before use"
+                        ),
+                        Severity.HIGH,
+                        node,
+                    )
+            # Check string formatting / concatenation inside call args
+            for arg in node.args:
+                if isinstance(arg, (ast.JoinedStr, ast.BinOp)):
+                    tainted_names = _extract_names(arg)
+                    for tname in tainted_names:
+                        if tname in self._tainted:
+                            self._add(
+                                "TAINT002",
+                                (
+                                    f"Untrusted input '{tname}' used in string"
+                                    f" formatting passed to '{sink}()'"
+                                    " — injection risk"
+                                ),
+                                Severity.CRITICAL,
+                                node,
+                            )
+        self.generic_visit(node)
+
+
+# ===========================================================================
+# Helpers
+# ===========================================================================
+
+
+def _looks_like_hardcoded_credential(s: str) -> bool:
+    """Heuristic: is this string a plausible hardcoded secret?
+
+    Avoids flagging empty strings, placeholder text, SQL query strings,
+    or very short values.
+    """
+    if len(s) < 8:
+        return False
+    # Obvious placeholders
+    _PLACEHOLDERS = {
+        "your-secret",
+        "your_secret",
+        "changeme",
+        "change_me",
+        "placeholder",
+        "example",
+        "test",
+        "dummy",
+        "password123",
+        "secret123",
+        "todo",
+        "fixme",
+    }
+    if s.lower() in _PLACEHOLDERS or any(p in s.lower() for p in _PLACEHOLDERS):
+        return False
+    # SQL query strings — contain SQL keywords, not secrets
+    _SQL_KEYWORDS = ("SELECT ", "INSERT ", "UPDATE ", "DELETE ", "WHERE ", "FROM ")
+    if any(kw in s.upper() for kw in _SQL_KEYWORDS):
+        return False
+    # SQL parameter placeholders (%s, ?, :name) — not credentials
+    if re.search(r"(%s|%d|\?|:\w+)", s):
+        return False
+    # Must contain at least one non-alpha character (keys, hashes, tokens do)
+    has_special = any(c in s for c in "0123456789!@#$^&*-_=+/\\")
+    return has_special
+
+
+def _extract_names(node: ast.expr) -> list[str]:
+    """Recursively extract all Name ids from an expression node."""
+    names: list[str] = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            names.append(child.id)
+    return names
+
+
+def _extract_added_lines(patch: str) -> str:
+    """Return only lines added by the patch (lines starting with '+').
+
+    Strips the leading '+' so the result is valid Python source.
+    Ignores '+++' diff headers.
+    """
+    lines = []
     for line in patch.splitlines():
-        if _DIFF_ADDED_RE.match(line):
-            added.append(line[1:])  # strip leading +
-    source = "\n".join(added)
-    return source, len(added)
+        if line.startswith("+++"):
+            continue
+        if line.startswith("+"):
+            lines.append(line[1:])
+    return "\n".join(lines)
 
 
-def _try_parse(source: str) -> tuple[ast.Module | None, str | None]:
-    """Attempt to parse source; return (tree, None) or (None, error_msg)."""
-    try:
-        tree = ast.parse(source)
-        return tree, None
-    except SyntaxError as exc:
-        return None, f"SyntaxError at line {exc.lineno}: {exc.msg}"
-    except Exception as exc:  # noqa: BLE001
-        return None, f"Parse error: {exc}"
-
-
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Public API
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 
 class PatchSemanticValidator:
-    """Validate a unified-diff patch for semantic security issues.
+    """Stateless AST validator — safe to share across threads.
 
-    Usage
-    -----
-    ::
+    Usage::
 
         validator = PatchSemanticValidator()
         result = validator.validate(patch_text)
-
         if result.has_critical:
-            # → BLOCK
-        elif result.has_high:
-            # → REVIEW
-        else:
-            # → proceed
+            raise PolicyViolation(result.critical_violations)
     """
 
-    def validate(self, patch: str) -> SemanticResult:
-        """Analyse added lines in *patch* for security violations.
+    _RULES: tuple[type[_Rule], ...] = (
+        _AuthRules,
+        _PrivRules,
+        _SecRules,
+        _TaintRules,
+    )
 
-        Parameters
-        ----------
-        patch:
-            Raw unified-diff string (as returned by the LLM).
+    def validate(self, patch: str) -> SemanticValidationResult:
+        """Analyse *patch* and return a :class:`SemanticValidationResult`.
 
-        Returns
-        -------
-        SemanticResult
-            Contains all violations found, parse errors, and line count.
+        The patch may be a unified diff or raw Python source — both are
+        handled.  When a diff is provided, only the *added* lines are
+        analysed (removed lines are safe by definition).
         """
-        result = SemanticResult()
-
         if not patch or not patch.strip():
-            return result
+            return SemanticValidationResult()
 
-        source, line_count = _extract_added_lines(patch)
-        result.analysed_lines = line_count
+        # Determine source to parse
+        is_diff = any(line.startswith(("---", "+++", "@@")) for line in patch.splitlines()[:10])
+        source = _extract_added_lines(patch) if is_diff else patch
 
         if not source.strip():
-            # Patch is deletions only — no added code to analyse.
-            return result
+            logger.debug("[D1] Patch has no added lines — nothing to validate")
+            return SemanticValidationResult()
 
-        # Attempt to dedent in case indented code was extracted.
+        # Dedent in case the patch is indented (e.g. inside a class)
         source = textwrap.dedent(source)
 
-        tree, parse_error = _try_parse(source)
+        # Parse
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as exc:
+            logger.warning("[D1] AST parse failed: %s", exc)
+            return SemanticValidationResult(
+                parse_error=f"SyntaxError at line {exc.lineno}: {exc.msg}"
+            )
 
-        if parse_error:
-            # Partial analysis — log the error but still run regex fallback.
-            result.parse_errors.append(parse_error)
-            logger.debug("[SemanticValidator] Parse failed: %s", parse_error)
-            self._regex_fallback(patch, result)
-            return result
+        # Run all rule sets
+        all_violations: list[SemanticViolation] = []
+        for rule_cls in self._RULES:
+            rule = rule_cls()
+            violations = rule.run(tree)
+            all_violations.extend(violations)
+            if violations:
+                logger.debug(
+                    "[D1] %s found %d violation(s)",
+                    rule_cls.__name__,
+                    len(violations),
+                )
 
-        visitor = _SecurityVisitor()
-        visitor.visit(tree)
-        result.violations.extend(visitor.violations)
+        result = SemanticValidationResult(violations=all_violations)
 
-        logger.info(
-            "[SemanticValidator] Analysed %d lines — %d violation(s) found.",
-            line_count,
-            len(result.violations),
-        )
+        if result.has_critical:
+            logger.warning(
+                "[D1] %d critical violation(s) — policy will BLOCK",
+                len(result.critical_violations),
+            )
+        elif result.has_high:
+            logger.info(
+                "[D1] %d high violation(s) — policy will REVIEW",
+                len(result.high_violations),
+            )
+        else:
+            logger.debug("[D1] No violations found")
+
         return result
-
-    # ------------------------------------------------------------------
-    # Regex fallback — catches obvious patterns when AST parse fails
-    # ------------------------------------------------------------------
-
-    _FALLBACK_PATTERNS: list[tuple[re.Pattern[str], Severity, str, str]] = [
-        (
-            re.compile(r"\bif\s+True\s*:", re.IGNORECASE),
-            Severity.CRITICAL,
-            "AUTH001",
-            "Hardcoded 'if True:' detected (regex fallback — AST unavailable).",
-        ),
-        (
-            re.compile(r"\bis_admin\s*=\s*True\b"),
-            Severity.CRITICAL,
-            "PRIV001",
-            "is_admin = True detected (regex fallback).",
-        ),
-        (
-            re.compile(r"\bpassword\s*=\s*['\"].+['\"]"),
-            Severity.CRITICAL,
-            "SEC001",
-            "Hardcoded password literal detected (regex fallback).",
-        ),
-        (
-            re.compile(r"\btoken\s*=\s*['\"].+['\"]"),
-            Severity.CRITICAL,
-            "SEC001",
-            "Hardcoded token literal detected (regex fallback).",
-        ),
-        (
-            re.compile(r"\beval\s*\("),
-            Severity.HIGH,
-            "TAINT002",
-            "eval() call detected (regex fallback).",
-        ),
-        (
-            re.compile(r"\bexec\s*\("),
-            Severity.HIGH,
-            "TAINT002",
-            "exec() call detected (regex fallback).",
-        ),
-    ]
-
-    def _regex_fallback(self, patch: str, result: SemanticResult) -> None:
-        """Run regex-based checks when AST parsing fails."""
-        added_lines = [line[1:] for line in patch.splitlines() if _DIFF_ADDED_RE.match(line)]
-        for i, line in enumerate(added_lines, start=1):
-            for pattern, severity, code, message in self._FALLBACK_PATTERNS:
-                if pattern.search(line):
-                    result.violations.append(
-                        SemanticViolation(
-                            severity=severity,
-                            code=code,
-                            message=message,
-                            line=i,
-                        )
-                    )
