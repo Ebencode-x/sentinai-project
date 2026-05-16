@@ -1,36 +1,33 @@
+import { useEffect } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/api/client";
 import { useApiKey } from "@/hooks/useApiKey";
+import { useHealth } from "@/hooks/useHealth";
+import { useToast } from "@/components/Toast";
 import clsx from "clsx";
 
 const NAV = [
-  { to: "/incidents", label: "INCIDENTS",  icon: "▲" },
-  { to: "/audit",     label: "AUDIT",      icon: "≡" },
-  { to: "/policy",    label: "POLICY",     icon: "◈" },
-  { to: "/diff",      label: "DIFF",       icon: "±" },
+  { to: "/incidents", label: "INCIDENTS", icon: "▲" },
+  { to: "/audit",     label: "AUDIT",     icon: "≡" },
+  { to: "/policy",    label: "POLICY",    icon: "◈" },
+  { to: "/diff",      label: "DIFF",      icon: "±" },
 ];
 
 export default function Layout() {
   const { clearKey } = useApiKey();
-  const navigate = useNavigate();
+  const navigate     = useNavigate();
+  const { live, ready, isBackendUp } = useHealth();
+  const { toast } = useToast();
 
-  const { data: health } = useQuery({
-    queryKey: ["health-live"],
-    queryFn: () => api.health.live().then((r) => r.data),
-    refetchInterval: 15_000,
-  });
-
-  const { data: ready } = useQuery({
-    queryKey: ["health-ready"],
-    queryFn: () => api.health.ready().then((r) => r.data),
-    refetchInterval: 30_000,
-  });
+  // Notify once when backend goes down
+  useEffect(() => {
+    if (isBackendUp === false) {
+      toast("Backend unreachable — check VITE_API_URL and backend status", "error");
+    }
+  }, [isBackendUp, toast]);
 
   const statusColor =
-    ready?.status === "ok"       ? "text-ok glow-ok" :
-    ready?.status === "degraded" ? "text-warn"        :
-    "text-red-500";
+    ready?.status === "ok"       ? "text-ok"   :
+    ready?.status === "degraded" ? "text-warn"  : "text-red-500";
 
   function handleLogout() {
     clearKey();
@@ -39,7 +36,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg">
-      {/* ── Top bar ───────────────────────────────────────────────────── */}
+      {/* ── Top bar ─────────────────────────────────────────────────── */}
       <header className="border-b border-bg-border px-6 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <svg width="24" height="24" viewBox="0 0 32 32" className="shrink-0">
@@ -54,25 +51,23 @@ export default function Layout() {
         </div>
 
         <div className="flex items-center gap-6 text-xs">
-          {/* System status */}
           <div className="flex items-center gap-2">
             <span className={clsx("font-medium", statusColor)}>
-              ● {ready?.status?.toUpperCase() ?? "—"}
+              ● {ready?.status?.toUpperCase() ?? (isBackendUp ? "CONNECTING…" : "OFFLINE")}
             </span>
-            <span className="text-muted">{health?.service ?? "sentinai"}</span>
+            <span className="text-muted">{live?.service ?? "sentinai"}</span>
           </div>
 
-          {/* Readiness checks mini bar */}
           {ready?.checks && (
             <div className="hidden md:flex items-center gap-1">
               {ready.checks.map((c) => (
                 <div
                   key={c.name}
-                  title={`${c.name}: ${c.status}`}
+                  title={`${c.name}: ${c.status}${c.detail ? " — " + c.detail : ""}`}
                   className={clsx(
                     "w-1.5 h-4 rounded-sm",
-                    c.status === "ok"       ? "bg-ok" :
-                    c.status === "degraded" ? "bg-warn" : "bg-red-500"
+                    c.status === "ok"       ? "bg-ok"      :
+                    c.status === "degraded" ? "bg-warn"    : "bg-red-500"
                   )}
                 />
               ))}
@@ -89,7 +84,7 @@ export default function Layout() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* ── Sidebar ───────────────────────────────────────────────────── */}
+        {/* ── Sidebar ─────────────────────────────────────────────────── */}
         <nav className="w-44 border-r border-bg-border shrink-0 py-6 flex flex-col gap-1 px-3">
           {NAV.map(({ to, label, icon }) => (
             <NavLink
@@ -97,10 +92,11 @@ export default function Layout() {
               to={to}
               className={({ isActive }) =>
                 clsx(
-                  "flex items-center gap-2 px-3 py-2 text-xs tracking-widest transition-all rounded-sm",
+                  "flex items-center gap-2 px-3 py-2 text-xs tracking-widest",
+                  "transition-all rounded-sm border-l-2",
                   isActive
-                    ? "text-accent bg-accent/5 border-l-2 border-accent glow-text"
-                    : "text-muted hover:text-text hover:bg-bg-card border-l-2 border-transparent"
+                    ? "text-accent bg-accent/5 border-accent glow-text"
+                    : "text-muted hover:text-text hover:bg-bg-card border-transparent"
                 )
               }
             >
@@ -110,13 +106,13 @@ export default function Layout() {
           ))}
 
           <div className="mt-auto pt-6 px-3 text-xs text-muted border-t border-bg-border">
-            <div className="mb-1 tracking-wider">SYSTEM</div>
-            {ready?.checks?.slice(0, 3).map((c) => (
+            <div className="mb-1 tracking-wider">CHECKS</div>
+            {ready?.checks?.map((c) => (
               <div key={c.name} className="flex justify-between py-0.5">
                 <span className="truncate">{c.name}</span>
                 <span className={
-                  c.status === "ok" ? "text-ok" :
-                  c.status === "degraded" ? "text-warn" : "text-red-500"
+                  c.status === "ok"       ? "text-ok"   :
+                  c.status === "degraded" ? "text-warn"  : "text-red-500"
                 }>
                   {c.status === "ok" ? "OK" : c.status === "degraded" ? "DEG" : "FAIL"}
                 </span>
@@ -125,7 +121,7 @@ export default function Layout() {
           </div>
         </nav>
 
-        {/* ── Main content ──────────────────────────────────────────────── */}
+        {/* ── Main ───────────────────────────────────────────────────── */}
         <main className="flex-1 overflow-auto p-6 animate-fade-in">
           <Outlet />
         </main>
