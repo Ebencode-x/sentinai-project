@@ -138,6 +138,12 @@ class WebhookDispatcher:
     @staticmethod
     def _post(url: str, body_bytes: bytes) -> bool:
         """HTTP POST body_bytes to url.  Returns True on 2xx response."""
+        # Scheme validation — only http/https are permitted.
+        # _load_urls() already enforces this; this is defense-in-depth.
+        if not url.startswith(("http://", "https://")):
+            logger.warning("[Webhook] Refusing to POST to non-http(s) URL: %r", url)
+            return False
+
         req = urllib.request.Request(
             url,
             data=body_bytes,
@@ -148,7 +154,8 @@ class WebhookDispatcher:
             },
         )
         try:
-            with urllib.request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:
+            # nosec B310 — URL scheme validated above; only http/https reach this line
+            with urllib.request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:  # nosec B310
                 status_code = resp.status
                 if 200 <= status_code < 300:
                     logger.info("[Webhook] Delivered to %s (%d)", url, status_code)
