@@ -31,6 +31,9 @@ target-version = "py311"
 "make_frontend.py" = ["E501"]
 "fix_prod.py" = ["E501"]
 "fix_types.py" = ["E501"]
+"fix_connect.py" = ["E501"]
+"fix_cors.py" = ["E501"]
+"fix_ruff.py" = ["E501"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
