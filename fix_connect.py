@@ -9,12 +9,14 @@ Connects frontend to live backend data:
 7. src/pages/DiffViewer.tsx  - same
 8. frontend/.env.local  - confirm dev backend URL
 """
+
 from pathlib import Path
 
 BASE = Path("frontend/src")
 
 # ── 1. api/client.ts — add error interceptor ─────────────────────────────
-(BASE / "api/client.ts").write_text('''\
+(BASE / "api/client.ts").write_text(
+    """\
 import axios, { AxiosError } from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
@@ -101,11 +103,14 @@ export const api = {
   suggestionLatest: () => http.get<Suggestion>("/suggestions/latest"),
   scanNow:          () => http.post<{ detected_incidents: number }>("/scan-now"),
 };
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/api/client.ts — error interceptor added")
 
 # ── 2. hooks/useHealth.ts ─────────────────────────────────────────────────
-(BASE / "hooks/useHealth.ts").write_text('''\
+(BASE / "hooks/useHealth.ts").write_text(
+    """\
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 
@@ -138,11 +143,14 @@ export function useHealth() {
     isLoading:   live.isLoading || ready.isLoading,
   };
 }
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/hooks/useHealth.ts")
 
 # ── 3. components/Toast.tsx ───────────────────────────────────────────────
-(BASE / "components/Toast.tsx").write_text('''\
+(BASE / "components/Toast.tsx").write_text(
+    """\
 import {
   createContext,
   useContext,
@@ -232,11 +240,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 export function useToast() {
   return useContext(Ctx);
 }
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/components/Toast.tsx")
 
 # ── 4. App.tsx — wire ToastProvider + useHealth banner ───────────────────
-(BASE / "App.tsx").write_text('''\
+(BASE / "App.tsx").write_text(
+    """\
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ToastProvider } from "@/components/Toast";
 import Layout from "@/components/Layout";
@@ -268,11 +279,14 @@ export default function App() {
     </ToastProvider>
   );
 }
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/App.tsx — ToastProvider wired")
 
 # ── 5. components/Skeleton.tsx — loading placeholder ─────────────────────
-(BASE / "components/Skeleton.tsx").write_text('''\
+(BASE / "components/Skeleton.tsx").write_text(
+    """\
 import clsx from "clsx";
 
 interface Props { className?: string; rows?: number; }
@@ -292,11 +306,14 @@ export default function Skeleton({ className, rows = 1 }: Props) {
     </div>
   );
 }
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/components/Skeleton.tsx")
 
 # ── 6. components/Layout.tsx — use useHealth hook + toast on backend down ─
-(BASE / "components/Layout.tsx").write_text('''\
+(BASE / "components/Layout.tsx").write_text(
+    """\
 import { useEffect } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useApiKey } from "@/hooks/useApiKey";
@@ -428,11 +445,14 @@ export default function Layout() {
     </div>
   );
 }
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/components/Layout.tsx — useHealth + toast on backend down")
 
 # ── 7. pages/IncidentTimeline.tsx — skeleton + toast on scan ─────────────
-(BASE / "pages/IncidentTimeline.tsx").write_text('''\
+(BASE / "pages/IncidentTimeline.tsx").write_text(
+    """\
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Incident } from "@/api/client";
@@ -628,7 +648,9 @@ function IncidentRow({ incident, index }: { incident: Incident; index: number })
     </div>
   );
 }
-''', encoding="utf-8")
+""",
+    encoding="utf-8",
+)
 print("WROTE  src/pages/IncidentTimeline.tsx — skeleton + toast")
 
 print()
