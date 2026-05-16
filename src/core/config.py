@@ -23,5 +23,7 @@ class Settings:
     github_token: str = os.getenv("GITHUB_TOKEN", "")
     github_repo: str = os.getenv("GITHUB_REPO", "")
 
+    cors_origins: str = ""  # comma-separated, e.g. https://app.sentinai.io
+
 
 settings = Settings()
