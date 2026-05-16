@@ -4,43 +4,55 @@ import { api, type Incident } from "@/api/client";
 import { format, parseISO } from "date-fns";
 import SeverityBadge from "@/components/SeverityBadge";
 import StatCard from "@/components/StatCard";
+import Skeleton from "@/components/Skeleton";
 import EmptyState from "@/components/EmptyState";
 import ErrorBanner from "@/components/ErrorBanner";
+import { useToast } from "@/components/Toast";
 import clsx from "clsx";
 
 function severityOrder(s: string) {
-  return { critical: 0, high: 1, medium: 2, low: 3 }[s] ?? 4;
+  return ({ critical: 0, high: 1, medium: 2, low: 3 } as Record<string,number>)[s] ?? 4;
 }
 
 export default function IncidentTimeline() {
   const qc = useQueryClient();
-  const [filter, setFilter] = useState<string>("all");
+  const { toast } = useToast();
+  const [filter, setFilter] = useState("all");
 
   const { data: incidents = [], isLoading, error } = useQuery({
     queryKey: ["incidents"],
-    queryFn: () => api.incidents().then((r) => r.data),
+    queryFn:  () => api.incidents().then((r) => r.data),
     refetchInterval: 15_000,
   });
 
   const { data: stats } = useQuery({
     queryKey: ["stats"],
-    queryFn: () => api.stats().then((r) => r.data),
+    queryFn:  () => api.stats().then((r) => r.data),
     refetchInterval: 30_000,
   });
 
   const scanMut = useMutation({
     mutationFn: () => api.scanNow().then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["incidents"] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      toast(
+        `Scan complete — ${data.detected_incidents} incident(s) detected`,
+        data.detected_incidents > 0 ? "warn" : "ok"
+      );
+    },
+    onError: () => toast("Scan failed — check backend connection", "error"),
   });
 
   const sorted = [...incidents].sort(
-    (a, b) => severityOrder(a.severity) - severityOrder(b.severity) ||
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    (a, b) =>
+      severityOrder(a.severity) - severityOrder(b.severity) ||
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  const filtered = filter === "all"
-    ? sorted
-    : sorted.filter((i) => i.severity === filter || i.status === filter);
+  const filtered =
+    filter === "all"
+      ? sorted
+      : sorted.filter((i) => i.severity === filter || i.status === filter);
 
   const critCount = incidents.filter((i) => i.severity === "critical").length;
   const openCount = incidents.filter((i) => i.status === "open").length;
@@ -50,11 +62,9 @@ export default function IncidentTimeline() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-sm font-display tracking-widest text-text">
-            INCIDENT TIMELINE
-          </h1>
+          <h1 className="text-sm font-display tracking-widest">INCIDENT TIMELINE</h1>
           <p className="text-xs text-muted mt-1 tracking-wide">
-            Real-time security event feed — auto-refresh every 15s
+            Live feed — auto-refresh every 15s
           </p>
         </div>
         <button
@@ -71,30 +81,27 @@ export default function IncidentTimeline() {
         </button>
       </div>
 
-      {/* Scan feedback */}
-      {scanMut.isSuccess && (
-        <div className="text-xs text-ok tracking-wide border border-ok/30 bg-ok/5 px-4 py-2 rounded-sm">
-          ✓ Scan complete — {scanMut.data?.detected_incidents ?? 0} incident(s) detected
-        </div>
-      )}
-
-      {/* Stat row */}
-      {stats && (
+      {/* Stats */}
+      {isLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="TOTAL SCANS"    value={stats.total_suggestions} />
-          <StatCard label="OPEN"           value={openCount}   accent={openCount > 0} />
-          <StatCard label="CRITICAL"       value={critCount}   accent={critCount > 0} />
+          <Skeleton className="h-20" rows={4} />
+        </div>
+      ) : stats ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard label="TOTAL SCANS" value={stats.total_suggestions} />
+          <StatCard label="OPEN"        value={openCount} accent={openCount > 0} />
+          <StatCard label="CRITICAL"    value={critCount} accent={critCount > 0} />
           <StatCard
             label="AVG LATENCY"
             value={stats.avg_latency_ms != null ? `${stats.avg_latency_ms}ms` : "—"}
             sub={stats.p95_latency_ms != null ? `p95: ${stats.p95_latency_ms}ms` : undefined}
           />
         </div>
-      )}
+      ) : null}
 
       {/* Filter bar */}
-      <div className="flex gap-2 flex-wrap">
-        {["all", "critical", "high", "medium", "low", "open", "resolved"].map((f) => (
+      <div className="flex gap-2 flex-wrap items-center">
+        {["all","critical","high","medium","low","open","resolved"].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -108,26 +115,24 @@ export default function IncidentTimeline() {
             {f}
           </button>
         ))}
-        <span className="ml-auto text-xs text-muted self-center">
+        <span className="ml-auto text-xs text-muted">
           {filtered.length} / {incidents.length}
         </span>
       </div>
 
-      {/* Error */}
-      {error && <ErrorBanner message="Failed to load incidents. Check API key and backend." />}
+      {error && (
+        <ErrorBanner message="Failed to load incidents. Verify API key and backend URL." />
+      )}
 
-      {/* Timeline */}
       {isLoading ? (
-        <div className="text-xs text-muted tracking-widest animate-pulse">LOADING…</div>
+        <Skeleton className="h-16" rows={5} />
       ) : filtered.length === 0 ? (
         <EmptyState message="NO INCIDENTS MATCH FILTER" />
       ) : (
         <div className="relative space-y-0">
-          {/* Vertical line */}
           <div className="absolute left-[7px] top-0 bottom-0 w-px bg-bg-border" />
-
-          {filtered.map((incident, i) => (
-            <IncidentRow key={incident.id} incident={incident} index={i} />
+          {filtered.map((inc, i) => (
+            <IncidentRow key={inc.id} incident={inc} index={i} />
           ))}
         </div>
       )}
@@ -155,13 +160,14 @@ function IncidentRow({ incident, index }: { incident: Incident; index: number })
       style={{ animationDelay: `${index * 40}ms` }}
       onClick={() => setOpen((o) => !o)}
     >
-      {/* Timeline dot */}
-      <div className={clsx("absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full border-2 border-bg", dotColor)} />
-
+      <div className={clsx(
+        "absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full border-2 border-bg",
+        dotColor
+      )} />
       <div className={clsx(
         "border border-bg-border bg-bg-card px-4 py-3 rounded-sm transition-all",
         "group-hover:border-accent/30",
-        open && "border-accent/20 bg-bg-card/80"
+        open && "border-accent/20"
       )}>
         <div className="flex items-start gap-3 flex-wrap">
           <SeverityBadge level={incident.severity} />
@@ -173,9 +179,7 @@ function IncidentRow({ incident, index }: { incident: Incident; index: number })
           )}
           <span className="ml-auto text-muted text-xs">{open ? "▲" : "▼"}</span>
         </div>
-
         <p className="text-sm text-text mt-2 leading-relaxed">{incident.title}</p>
-
         {open && (
           <div className="mt-3 pt-3 border-t border-bg-border space-y-2 animate-fade-in">
             <p className="text-xs text-muted leading-relaxed">{incident.description}</p>

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ToastProvider } from "@/components/Toast";
 import Layout from "@/components/Layout";
 import LoginPage from "@/pages/LoginPage";
 import IncidentTimeline from "@/pages/IncidentTimeline";
@@ -10,19 +11,21 @@ import { useApiKey } from "@/hooks/useApiKey";
 export default function App() {
   const { hasKey } = useApiKey();
 
-  if (!hasKey) return <LoginPage />;
+  if (!hasKey) return <ToastProvider><LoginPage /></ToastProvider>;
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/incidents" replace />} />
-          <Route path="incidents"  element={<IncidentTimeline />} />
-          <Route path="audit"      element={<AuditExplorer />} />
-          <Route path="policy"     element={<PolicyEditor />} />
-          <Route path="diff"       element={<DiffViewer />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Navigate to="/incidents" replace />} />
+            <Route path="incidents" element={<IncidentTimeline />} />
+            <Route path="audit"     element={<AuditExplorer />} />
+            <Route path="policy"    element={<PolicyEditor />} />
+            <Route path="diff"      element={<DiffViewer />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }

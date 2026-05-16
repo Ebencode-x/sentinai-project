@@ -1,28 +1,35 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 
-/**
- * Base URL resolution:
- *  - Development (npm run dev):  proxy via Vite → localhost:8000
- *    VITE_API_URL is NOT set, so baseURL = "/api" (Vite rewrites to backend)
- *  - Production (npm run build): VITE_API_URL=https://your-backend.com
- *    baseURL = "https://your-backend.com" (direct, no proxy)
- *
- * Set in frontend/.env.local for dev overrides (gitignored).
- * Set in CI/CD or hosting platform env vars for production.
- */
 const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const KEY      = "sentinai_api_key";
+const EXPIRY   = "sentinai_key_expiry";
 
-const getKey = () => localStorage.getItem("sentinai_api_key") ?? "";
+export const getApiKey = () => localStorage.getItem(KEY) ?? "";
 
 export const http = axios.create({ baseURL: BASE_URL });
 
+// ── Request: attach API key ───────────────────────────────────────────────
 http.interceptors.request.use((cfg) => {
-  const key = getKey();
+  const key = getApiKey();
   if (key) cfg.headers["X-API-Key"] = key;
   return cfg;
 });
 
-// ── Domain types (mirrors backend models) ─────────────────────────────────
+// ── Response: handle auth + server errors globally ────────────────────────
+http.interceptors.response.use(
+  (res) => res,
+  (err: AxiosError) => {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      // Expired or invalid key — clear session and reload to login screen
+      localStorage.removeItem(KEY);
+      localStorage.removeItem(EXPIRY);
+      window.location.reload();
+    }
+    return Promise.reject(err);
+  }
+);
+
+// ── Domain types ──────────────────────────────────────────────────────────
 
 export interface Incident {
   id: string;
