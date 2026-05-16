@@ -20,7 +20,7 @@ export default function Layout() {
 
   // Notify once when backend goes down
   useEffect(() => {
-    if (isBackendUp === false) {
+    if (isBackendUp === false) {  // null = loading, false = confirmed down
       toast("Backend unreachable — check VITE_API_URL and backend status", "error");
     }
   }, [isBackendUp, toast]);

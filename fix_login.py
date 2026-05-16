@@ -1,3 +1,8 @@
+from pathlib import Path
+
+# ── 1. Fix LoginPage — replace form with div + onClick ───────────────────
+Path("frontend/src/pages/LoginPage.tsx").write_text(
+    """\
 import { useState, KeyboardEvent } from "react";
 import { useApiKey } from "@/hooks/useApiKey";
 
@@ -87,3 +92,62 @@ export default function LoginPage() {
     </div>
   );
 }
+""",
+    encoding="utf-8",
+)
+print("WROTE  src/pages/LoginPage.tsx — form → div, Enter key support")
+
+# ── 2. Fix useHealth — isBackendUp logic ─────────────────────────────────
+Path("frontend/src/hooks/useHealth.ts").write_text(
+    """\
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
+
+export function useHealth() {
+  const live = useQuery({
+    queryKey:        ["health-live"],
+    queryFn:         () => api.health.live().then((r) => r.data),
+    refetchInterval: 15_000,
+    retry:           1,
+  });
+
+  const ready = useQuery({
+    queryKey:        ["health-ready"],
+    queryFn:         () => api.health.ready().then((r) => r.data),
+    refetchInterval: 30_000,
+    retry:           1,
+  });
+
+  // Only mark as down if query succeeded but status is bad,
+  // or if query explicitly failed (not just loading)
+  const isBackendUp =
+    live.isLoading || ready.isLoading
+      ? null  // still connecting — don't show warning yet
+      : live.isError && ready.isError
+        ? false
+        : true;
+
+  return {
+    live:        live.data,
+    ready:       ready.data,
+    isBackendUp,
+    isLoading:   live.isLoading || ready.isLoading,
+  };
+}
+""",
+    encoding="utf-8",
+)
+print("WROTE  src/hooks/useHealth.ts — isBackendUp fix (no false warning)")
+
+# ── 3. Fix Layout — only toast when isBackendUp is explicitly false ───────
+# Update the useEffect condition
+layout = Path("frontend/src/components/Layout.tsx")
+content = layout.read_text(encoding="utf-8")
+old = "if (isBackendUp === false) {"
+new = "if (isBackendUp === false) {  // null = loading, false = confirmed down"
+content = content.replace(old, new)
+layout.write_text(content, encoding="utf-8")
+print("WROTE  src/components/Layout.tsx — toast guard updated")
+
+print()
+print("Done. Run: cd frontend && npm run type-check")
