@@ -2,43 +2,78 @@ import type { Config } from "tailwindcss";
 
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: ["class"],
   theme: {
     extend: {
       fontFamily: {
-        mono: ["'JetBrains Mono'", "'Fira Code'", "monospace"],
-        display: ["'DM Mono'", "monospace"],
+        display: ["'Syne'", "sans-serif"],
+        body:    ["'DM Sans'", "system-ui", "sans-serif"],
+        mono:    ["'IBM Plex Mono'", "monospace"],
       },
       colors: {
-        bg:      { DEFAULT: "#080c10", card: "#0d1117", border: "#1a2332" },
-        accent:  { DEFAULT: "#00d4ff", dim: "#0099bb", glow: "#00d4ff33" },
-        warn:    { DEFAULT: "#ff6b35", dim: "#cc4422" },
-        ok:      { DEFAULT: "#00ff88", dim: "#00cc66" },
-        muted:   "#4a5568",
-        text:    { DEFAULT: "#c9d1d9", dim: "#8b949e" },
+        /* Map Tailwind classes → CSS variables so theme toggle is automatic */
+        base:     "var(--bg-base)",
+        surface:  "var(--bg-surface)",
+        elevated: "var(--bg-elevated)",
+        panel:    "var(--bg-panel)",
+        hover:    "var(--bg-hover)",
+
+        border:   "var(--border)",
+        "border-strong": "var(--border-strong)",
+        "border-focus":  "var(--border-focus)",
+
+        primary:   "var(--text-primary)",
+        secondary: "var(--text-secondary)",
+        muted:     "var(--text-muted)",
+        hint:      "var(--text-hint)",
+
+        cyan:   "var(--cyan)",
+        red:    "var(--red)",
+        amber:  "var(--amber)",
+        green:  "var(--green)",
+        purple: "var(--purple)",
+
+        /* Legacy aliases kept so existing pages don't break */
+        bg: {
+          DEFAULT: "var(--bg-base)",
+          card:    "var(--bg-surface)",
+          border:  "var(--border)",
+        },
+        accent: {
+          DEFAULT: "var(--cyan)",
+          dim:     "var(--cyan-dim)",
+          glow:    "var(--cyan-glow)",
+        },
+        warn:  { DEFAULT: "var(--amber)", dim: "var(--amber-dim)" },
+        ok:    { DEFAULT: "var(--green)",  dim: "var(--green-dim)" },
+        text:  { DEFAULT: "var(--text-primary)", dim: "var(--text-secondary)" },
+      },
+      borderColor: {
+        DEFAULT: "var(--border)",
       },
       boxShadow: {
-        "glow-accent": "0 0 20px #00d4ff33, 0 0 40px #00d4ff11",
-        "glow-warn":   "0 0 20px #ff6b3533",
+        "glow-accent": "0 0 0 1px var(--cyan),  0 0 24px var(--cyan-glow)",
+        "glow-red":    "0 0 0 1px var(--red),   0 0 24px var(--red-dim)",
+        "glow-green":  "0 0 0 1px var(--green), 0 0 24px var(--green-dim)",
+        "panel":       "0 1px 3px rgba(0,0,0,0.35)",
       },
       animation: {
         "pulse-slow": "pulse 3s cubic-bezier(0.4,0,0.6,1) infinite",
-        "scan-line":  "scan 4s linear infinite",
-        "fade-in":    "fadeIn 0.3s ease-out",
-        "slide-up":   "slideUp 0.4s ease-out",
+        "fade-in":    "fadeIn 0.25s ease-out both",
+        "slide-up":   "slideUp 0.3s ease-out both",
+        "pulse-dot":  "pulseDot 1.4s ease-in-out infinite",
       },
       keyframes: {
-        scan: {
-          "0%":   { transform: "translateY(-100%)" },
-          "100%": { transform: "translateY(100vh)" },
-        },
-        fadeIn: {
-          from: { opacity: "0" },
-          to:   { opacity: "1" },
-        },
-        slideUp: {
-          from: { opacity: "0", transform: "translateY(12px)" },
-          to:   { opacity: "1", transform: "translateY(0)" },
-        },
+        fadeIn:   { from: { opacity: "0" },                               to: { opacity: "1" } },
+        slideUp:  { from: { opacity: "0", transform: "translateY(10px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        pulseDot: { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.25" } },
+      },
+      borderRadius: {
+        sm:  "6px",
+        md:  "8px",
+        lg:  "12px",
+        xl:  "16px",
+        "2xl": "20px",
       },
     },
   },

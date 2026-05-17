@@ -91,7 +91,21 @@ def prometheus_metrics() -> PlainTextResponse:
 
 @router.get("/incidents", dependencies=_PROTECTED, tags=["incidents"])
 def incidents() -> list[dict]:
-    return [incident.model_dump(mode="json") for incident in app_state.recent_incidents]
+    out = []
+    for inc in app_state.recent_incidents:
+        tl = inc.trigger_line or ""
+        if tl.startswith("Traceback"):
+            continue
+        out.append({
+            "id":        inc.incident_id,
+            "timestamp": inc.detected_at_utc.isoformat(),
+            "severity":  "critical" if inc.severity == "critical" else "high",
+            "title":     tl,
+            "description": inc.stacktrace or tl,
+            "status":    "open",
+            "source":    tl.split(".")[0] if "." in tl else "sentinai",
+        })
+    return out
 
 
 @router.get("/suggestions", dependencies=_PROTECTED, tags=["incidents"])
