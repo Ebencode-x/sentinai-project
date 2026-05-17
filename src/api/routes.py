@@ -96,15 +96,17 @@ def incidents() -> list[dict]:
         tl = inc.trigger_line or ""
         if tl.startswith("Traceback"):
             continue
-        out.append({
-            "id":        inc.incident_id,
-            "timestamp": inc.detected_at_utc.isoformat(),
-            "severity":  "critical" if inc.severity == "critical" else "high",
-            "title":     tl,
-            "description": inc.stacktrace or tl,
-            "status":    "open",
-            "source":    tl.split(".")[0] if "." in tl else "sentinai",
-        })
+        out.append(
+            {
+                "id": inc.incident_id,
+                "timestamp": inc.detected_at_utc.isoformat(),
+                "severity": "critical" if inc.severity == "critical" else "high",
+                "title": tl,
+                "description": inc.stacktrace or tl,
+                "status": "open",
+                "source": tl.split(".")[0] if "." in tl else "sentinai",
+            }
+        )
     return out
 
 
