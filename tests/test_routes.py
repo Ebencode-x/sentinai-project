@@ -36,7 +36,15 @@ def make_suggestion(summary="Fix it", source="stub"):
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    from src.api.auth import Tenant, RateLimitTier, require_tenant
+    from src.api.security import require_api_key
+    async def mock_tenant():
+        return Tenant(name="test", tier=RateLimitTier.INTERNAL)
+    app.dependency_overrides[require_tenant] = mock_tenant
+    app.dependency_overrides[require_api_key] = mock_tenant
+    c = TestClient(app)
+    yield c
+    app.dependency_overrides.clear()
 
 
 class TestHealth:
@@ -87,7 +95,7 @@ class TestIncidents:
 
         inc = make_incident("route-test-001")
         app_state.recent_incidents.append(inc)
-        ids = [i["incident_id"] for i in client.get("/incidents").json()]
+        ids = [i["id"] for i in client.get("/incidents").json()]
         assert "route-test-001" in ids
         app_state.recent_incidents.remove(inc)
 
@@ -97,8 +105,8 @@ class TestIncidents:
         inc = make_incident("field-check-002")
         app_state.recent_incidents.append(inc)
         data = client.get("/incidents").json()
-        match = next(i for i in data if i["incident_id"] == "field-check-002")
-        assert "trigger_line" in match
+        match = next(i for i in data if i["id"] == "field-check-002")
+        assert "title" in match
         assert "severity" in match
         app_state.recent_incidents.remove(inc)
 
