@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import router
 from src.api.chat import router as chat_router
+from src.api.routes import router
 from src.core.config import settings
 from src.core.state import app_state
 
