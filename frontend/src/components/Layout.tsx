@@ -17,6 +17,7 @@ import { useHealth }  from "@/hooks/useHealth";
 import { useToast }   from "@/components/Toast";
 import { useTheme }   from "@/hooks/useTheme";
 import clsx from "clsx";
+import ChatPanel from "@/components/ChatPanel";
 
 const NAV = [
   { to: "/dashboard", label: "Overview",  Icon: LayoutDashboard },
@@ -252,6 +253,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      <ChatPanel />
     </div>
   );
 }
