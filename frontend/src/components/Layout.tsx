@@ -1,33 +1,48 @@
 import { useEffect } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { useApiKey } from "@/hooks/useApiKey";
-import { useHealth } from "@/hooks/useHealth";
-import { useToast } from "@/components/Toast";
+import {
+  LayoutDashboard,
+  AlertTriangle,
+  ClipboardList,
+  ShieldCheck,
+  GitCompareArrows,
+  Settings,
+  Sun,
+  Moon,
+  LogOut,
+  Activity,
+} from "lucide-react";
+import { useApiKey }  from "@/hooks/useApiKey";
+import { useHealth }  from "@/hooks/useHealth";
+import { useToast }   from "@/components/Toast";
+import { useTheme }   from "@/hooks/useTheme";
 import clsx from "clsx";
 
 const NAV = [
-  { to: "/incidents", label: "INCIDENTS", icon: "▲" },
-  { to: "/audit",     label: "AUDIT",     icon: "≡" },
-  { to: "/policy",    label: "POLICY",    icon: "◈" },
-  { to: "/diff",      label: "DIFF",      icon: "±" },
+  { to: "/dashboard", label: "Overview",  Icon: LayoutDashboard },
+  { to: "/incidents", label: "Incidents", Icon: AlertTriangle    },
+  { to: "/audit",     label: "Audit",     Icon: ClipboardList    },
+  { to: "/policy",    label: "Policy",    Icon: ShieldCheck      },
+  { to: "/diff",      label: "Diff",      Icon: GitCompareArrows          },
+  { to: "/settings",  label: "Settings",  Icon: Settings         },
 ];
 
 export default function Layout() {
-  const { clearKey } = useApiKey();
-  const navigate     = useNavigate();
+  const { clearKey }             = useApiKey();
+  const navigate                 = useNavigate();
   const { live, ready, isBackendUp } = useHealth();
-  const { toast } = useToast();
+  const { toast }                = useToast();
+  const { theme, toggle }        = useTheme();
 
-  // Notify once when backend goes down
   useEffect(() => {
-    if (isBackendUp === false) {  // null = loading, false = confirmed down
-      toast("Backend unreachable — check VITE_API_URL and backend status", "error");
+    if (isBackendUp === false) {
+      toast("Backend unreachable — check VITE_API_URL", "error");
     }
   }, [isBackendUp, toast]);
 
-  const statusColor =
-    ready?.status === "ok"       ? "text-ok"   :
-    ready?.status === "degraded" ? "text-warn"  : "text-red-500";
+  const statusOk      = ready?.status === "ok";
+  const statusDeg     = ready?.status === "degraded";
+  const statusOffline = isBackendUp === false;
 
   function handleLogout() {
     clearKey();
@@ -35,94 +50,205 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg">
-      {/* ── Top bar ─────────────────────────────────────────────────── */}
-      <header className="border-b border-bg-border px-6 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <svg width="24" height="24" viewBox="0 0 32 32" className="shrink-0">
-            <polygon points="16,3 29,10 29,22 16,29 3,22 3,10"
-              fill="none" stroke="#00d4ff" strokeWidth="2"/>
-            <circle cx="16" cy="16" r="4" fill="#00d4ff"/>
-          </svg>
-          <span className="text-accent font-display font-medium tracking-widest text-sm glow-text">
-            SENTINAI
-          </span>
-          <span className="text-muted text-xs tracking-wider">// SECURITY OPERATIONS</span>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}
+    >
+      {/* ── Sidebar ──────────────────────────────────────────────── */}
+      <aside
+        className="flex flex-col items-center w-14 shrink-0 py-4 gap-1"
+        style={{
+          background:  "var(--bg-surface)",
+          borderRight: "0.5px solid var(--border)",
+        }}
+      >
+        {/* Logo */}
+        <div className="mb-3 flex items-center justify-center">
+          <div
+            className="w-8 h-8 rounded-md flex items-center justify-center"
+            style={{ background: "var(--cyan)" }}
+          >
+            <svg viewBox="0 0 18 18" width="16" height="16" fill="none">
+              <path
+                d="M9 1L16 5V13L9 17L2 13V5L9 1Z"
+                stroke="var(--bg-base)"
+                strokeWidth="1.5"
+              />
+              <circle cx="9" cy="9" r="2.5" fill="var(--bg-base)" />
+            </svg>
+          </div>
         </div>
 
-        <div className="flex items-center gap-6 text-xs">
-          <div className="flex items-center gap-2">
-            <span className={clsx("font-medium", statusColor)}>
-              ● {ready?.status?.toUpperCase() ?? (isBackendUp ? "CONNECTING…" : "OFFLINE")}
-            </span>
-            <span className="text-muted">{live?.service ?? "sentinai"}</span>
-          </div>
+        {/* Nav items */}
+        {NAV.map(({ to, label, Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            title={label}
+            className={({ isActive }) =>
+              clsx(
+                "w-9 h-9 rounded-md flex items-center justify-center transition-all group relative",
+                isActive
+                  ? "text-[var(--cyan)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              )
+            }
+            style={({ isActive }) =>
+              isActive
+                ? { background: "var(--cyan-dim)" }
+                : undefined
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon size={16} strokeWidth={isActive ? 2 : 1.75} />
+                {/* Tooltip */}
+                <span
+                  className="pointer-events-none absolute left-full ml-2 px-2 py-1 text-xs rounded-md
+                             opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50
+                             font-body"
+                  style={{
+                    background: "var(--bg-panel)",
+                    color:      "var(--text-primary)",
+                    border:     "0.5px solid var(--border-strong)",
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize:   "11px",
+                  }}
+                >
+                  {label}
+                </span>
+              </>
+            )}
+          </NavLink>
+        ))}
 
-          {ready?.checks && (
-            <div className="hidden md:flex items-center gap-1">
-              {ready.checks.map((c) => (
-                <div
-                  key={c.name}
-                  title={`${c.name}: ${c.status}${c.detail ? " — " + c.detail : ""}`}
-                  className={clsx(
-                    "w-1.5 h-4 rounded-sm",
-                    c.status === "ok"       ? "bg-ok"      :
-                    c.status === "degraded" ? "bg-warn"    : "bg-red-500"
-                  )}
-                />
-              ))}
-            </div>
-          )}
+        {/* Bottom controls */}
+        <div className="mt-auto flex flex-col items-center gap-2">
+          {/* Status dot */}
+          <div
+            title={ready?.status ?? (isBackendUp ? "connecting" : "offline")}
+            className={clsx(
+              "w-2 h-2 rounded-full",
+              statusOk      ? "animate-pulse-dot" : "",
+            )}
+            style={{
+              background: statusOk
+                ? "var(--green)"
+                : statusDeg
+                ? "var(--amber)"
+                : "var(--red)",
+            }}
+          />
 
+          {/* Theme toggle */}
+          <button
+            onClick={toggle}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            className="w-9 h-9 rounded-md flex items-center justify-center transition-all
+                       text-[var(--text-muted)] hover:text-[var(--text-secondary)]
+                       hover:bg-[var(--bg-elevated)]"
+          >
+            {theme === "dark"
+              ? <Sun  size={15} strokeWidth={1.75} />
+              : <Moon size={15} strokeWidth={1.75} />
+            }
+          </button>
+
+          {/* Logout */}
           <button
             onClick={handleLogout}
-            className="text-muted hover:text-text transition-colors tracking-wider"
+            title="Logout"
+            className="w-9 h-9 rounded-md flex items-center justify-center transition-all
+                       text-[var(--text-muted)] hover:text-[var(--red)]
+                       hover:bg-[var(--red-dim)]"
           >
-            [LOGOUT]
+            <LogOut size={15} strokeWidth={1.75} />
           </button>
-        </div>
-      </header>
 
-      <div className="flex flex-1 min-h-0">
-        {/* ── Sidebar ─────────────────────────────────────────────────── */}
-        <nav className="w-44 border-r border-bg-border shrink-0 py-6 flex flex-col gap-1 px-3">
-          {NAV.map(({ to, label, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                clsx(
-                  "flex items-center gap-2 px-3 py-2 text-xs tracking-widest",
-                  "transition-all rounded-sm border-l-2",
-                  isActive
-                    ? "text-accent bg-accent/5 border-accent glow-text"
-                    : "text-muted hover:text-text hover:bg-bg-card border-transparent"
-                )
+          {/* Avatar */}
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center mt-1
+                       font-mono text-[10px] font-medium text-white"
+            style={{
+              background: "linear-gradient(135deg, var(--purple), var(--cyan))",
+            }}
+          >
+            EB
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Main area ────────────────────────────────────────────── */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Topbar */}
+        <header
+          className="h-12 shrink-0 flex items-center px-5 gap-3"
+          style={{
+            background:   "var(--bg-surface)",
+            borderBottom: "0.5px solid var(--border)",
+          }}
+        >
+          {/* Breadcrumb / page title rendered by each page via a portal in future;
+              for now show service name */}
+          <span
+            className="font-display font-semibold tracking-tight text-sm"
+            style={{ color: "var(--text-primary)", fontFamily: "'Syne', sans-serif" }}
+          >
+            SentinAI
+          </span>
+          <span
+            className="text-xs font-mono"
+            style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
+          >
+            / {live?.service ?? "production"}
+          </span>
+
+          <div className="ml-auto flex items-center gap-3">
+            {/* Backend health checks pill row */}
+            {ready?.checks && (
+              <div className="hidden md:flex items-center gap-1">
+                {ready.checks.map((c) => (
+                  <div
+                    key={c.name}
+                    title={`${c.name}: ${c.status}${c.detail ? " — " + c.detail : ""}`}
+                    className="w-1.5 h-4 rounded-sm"
+                    style={{
+                      background:
+                        c.status === "ok"
+                          ? "var(--green)"
+                          : c.status === "degraded"
+                          ? "var(--amber)"
+                          : "var(--red)",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Live / Offline badge */}
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-medium tracking-widest"
+              style={
+                statusOffline
+                  ? { background: "var(--red-dim)",  color: "var(--red)",   border: "0.5px solid var(--red)"   }
+                  : statusDeg
+                  ? { background: "var(--amber-dim)", color: "var(--amber)", border: "0.5px solid var(--amber)" }
+                  : { background: "var(--red-dim)",   color: "var(--red)",   border: "0.5px solid var(--red)"   }
               }
             >
-              <span className="w-4 text-center">{icon}</span>
-              {label}
-            </NavLink>
-          ))}
-
-          <div className="mt-auto pt-6 px-3 text-xs text-muted border-t border-bg-border">
-            <div className="mb-1 tracking-wider">CHECKS</div>
-            {ready?.checks?.map((c) => (
-              <div key={c.name} className="flex justify-between py-0.5">
-                <span className="truncate">{c.name}</span>
-                <span className={
-                  c.status === "ok"       ? "text-ok"   :
-                  c.status === "degraded" ? "text-warn"  : "text-red-500"
-                }>
-                  {c.status === "ok" ? "OK" : c.status === "degraded" ? "DEG" : "FAIL"}
-                </span>
-              </div>
-            ))}
+              <span
+                className="w-1.5 h-1.5 rounded-full animate-pulse-dot"
+                style={{
+                  background: statusOffline ? "var(--red)" : statusDeg ? "var(--amber)" : "var(--red)",
+                }}
+              />
+              {statusOffline ? "OFFLINE" : statusDeg ? "DEGRADED" : "LIVE"}
+            </div>
           </div>
-        </nav>
+        </header>
 
-        {/* ── Main ───────────────────────────────────────────────────── */}
-        <main className="flex-1 overflow-auto p-6 animate-fade-in">
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto p-5 animate-fade-in">
           <Outlet />
         </main>
       </div>
