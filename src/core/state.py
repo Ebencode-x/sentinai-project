@@ -1,6 +1,8 @@
 """Shared in-memory state for the demo API."""
 
 from __future__ import annotations
+import logging
+logger = logging.getLogger(__name__)
 
 import threading
 from collections import OrderedDict, deque
@@ -53,6 +55,7 @@ class AppState:
                 self._incident_dedupe.popitem(last=False)
 
             self.recent_incidents.append(incident)
+            self._save_incidents()
             suggestion = self.remediation_engine.suggest_fix(incident)
             self.recent_suggestions.append(suggestion)
 
@@ -96,5 +99,38 @@ class AppState:
                 "llm_metrics": metrics.snapshot(),
             }
 
+
+    def _incidents_cache_path(self):
+        import pathlib
+        p = pathlib.Path(self.watcher.config.log_file_path).parent / "incidents.json"
+        return p
+
+    def _save_incidents(self):
+        import json
+        try:
+            data = [inc.model_dump(mode="json") for inc in self.recent_incidents]
+            self._incidents_cache_path().write_text(json.dumps(data, default=str))
+        except Exception as e:
+            logger.warning("[state] Failed to save incidents: %s", e)
+
+    def load_incidents(self):
+        import json
+        from src.models.events import LogIncident
+        p = self._incidents_cache_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text())
+            for d in data:
+                try:
+                    inc = LogIncident(**d)
+                    if inc.incident_id not in self._incident_dedupe:
+                        self._incident_dedupe[inc.incident_id] = None
+                        self.recent_incidents.append(inc)
+                except Exception:
+                    pass
+            logger.info("[state] Loaded %d incidents from cache", len(self.recent_incidents))
+        except Exception as e:
+            logger.warning("[state] Failed to load incidents: %s", e)
 
 app_state = AppState()
