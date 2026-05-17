@@ -1,9 +1,8 @@
 """Shared in-memory state for the demo API."""
 
 from __future__ import annotations
-import logging
-logger = logging.getLogger(__name__)
 
+import logging
 import threading
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
@@ -15,6 +14,8 @@ from src.integrations.notifier import notify
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.remediation_engine import RemediationEngine
 from src.services.watcher import LogWatcher, WatcherConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -99,14 +100,15 @@ class AppState:
                 "llm_metrics": metrics.snapshot(),
             }
 
-
     def _incidents_cache_path(self):
         import pathlib
+
         p = pathlib.Path(self.watcher.config.log_file_path).parent / "incidents.json"
         return p
 
     def _save_incidents(self):
         import json
+
         try:
             data = [inc.model_dump(mode="json") for inc in self.recent_incidents]
             self._incidents_cache_path().write_text(json.dumps(data, default=str))
@@ -115,7 +117,9 @@ class AppState:
 
     def load_incidents(self):
         import json
+
         from src.models.events import LogIncident
+
         p = self._incidents_cache_path()
         if not p.exists():
             return
@@ -132,5 +136,6 @@ class AppState:
             logger.info("[state] Loaded %d incidents from cache", len(self.recent_incidents))
         except Exception as e:
             logger.warning("[state] Failed to load incidents: %s", e)
+
 
 app_state = AppState()
