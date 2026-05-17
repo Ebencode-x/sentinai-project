@@ -9,9 +9,19 @@ import AuditExplorer      from "@/pages/AuditExplorer";
 import PolicyEditor       from "@/pages/PolicyEditor";
 import DiffViewer         from "@/pages/DiffViewer";
 import { useApiKey }      from "@/hooks/useApiKey";
+import { useEffect }       from "react";
 
 export default function App() {
-  const { hasKey } = useApiKey();
+  const { hasKey, clearKey } = useApiKey();
+  useEffect(() => {
+    const id = setInterval(() => {
+      const exp = localStorage.getItem("sentinai_key_expiry");
+      if (exp && Date.now() > parseInt(exp, 10)) {
+        clearKey();
+      }
+    }, 60_000); // check every minute
+    return () => clearInterval(id);
+  }, [clearKey]);
 
   if (!hasKey) {
     return (
