@@ -36,7 +36,7 @@ def make_suggestion(summary="Fix it", source="stub"):
 
 @pytest.fixture
 def client():
-    from src.api.auth import Tenant, RateLimitTier, require_tenant
+    from src.api.auth import RateLimitTier, Tenant, require_tenant
     from src.api.security import require_api_key
     async def mock_tenant():
         return Tenant(name="test", tier=RateLimitTier.INTERNAL)
