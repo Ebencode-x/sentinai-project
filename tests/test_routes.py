@@ -38,8 +38,10 @@ def make_suggestion(summary="Fix it", source="stub"):
 def client():
     from src.api.auth import RateLimitTier, Tenant, require_tenant
     from src.api.security import require_api_key
+
     async def mock_tenant():
         return Tenant(name="test", tier=RateLimitTier.INTERNAL)
+
     app.dependency_overrides[require_tenant] = mock_tenant
     app.dependency_overrides[require_api_key] = mock_tenant
     c = TestClient(app)
