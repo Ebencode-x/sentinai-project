@@ -10,7 +10,6 @@ import {
   Sun,
   Moon,
   LogOut,
-  Activity,
 } from "lucide-react";
 import { useApiKey }  from "@/hooks/useApiKey";
 import { useHealth }  from "@/hooks/useHealth";

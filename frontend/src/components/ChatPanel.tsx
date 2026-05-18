@@ -35,7 +35,7 @@ export default function ChatPanel() {
     setMessages((prev) => [...prev, { role: "user", content: q }]);
     setLoading(true);
 
-    const assistantIdx = messages.length + 1;
+    // const assistantIdx = messages.length + 1;
     setMessages((prev) => [
       ...prev,
       { role: "assistant", content: "", streaming: true },
