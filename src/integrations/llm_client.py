@@ -160,12 +160,19 @@ class ClaudeLLMClient(BaseLLMClient):
             "model": self._model,
             "max_tokens": 1200,
             "temperature": 0.2,
-            "system": _system_prompt(),
+            "system": [
+                {
+                    "type": "text",
+                    "text": _system_prompt(),
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             "messages": [{"role": "user", "content": _incident_prompt(incident)}],
         }
         headers = {
             "x-api-key": self._api_key,
             "anthropic-version": "2023-06-01",
+            "anthropic-beta": "prompt-caching-2024-07-31",
         }
 
         body = _post_json_with_retry(
