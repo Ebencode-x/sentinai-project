@@ -196,7 +196,7 @@ sentinai-project/
 > *"I started learning Python 2 months ago. This is what happened."*
 
 - GitHub: [@Ebencode-x](https://github.com/Ebencode-x)
-- LinkedIn: [Ebenezer](https://linkedin.com/in/ebenezer)
+- LinkedIn: [Ebenezer](https://www.linkedin.com/in/ebenezer-richard-masanja-a49437399)
 
 ---
 
