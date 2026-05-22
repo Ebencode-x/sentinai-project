@@ -1,195 +1,105 @@
-import { useState, KeyboardEvent } from "react";
+import { useState, KeyboardEvent, useEffect } from "react";
 import { useApiKey } from "@/hooks/useApiKey";
-import { Shield, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Shield, ArrowRight, Eye, EyeOff, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function LoginPage() {
-  const { setKey }           = useApiKey();
-  const [value, setValue]    = useState("");
-  const [error, setError]    = useState("");
+  const { setKey } = useApiKey();
+  const { theme, toggle } = useTheme();
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dots, setDots] = useState("");
 
-  function handleSubmit() {
-    if (!value.trim()) {
-      setError("API key is required");
-      return;
-    }
-    setLoading(true);
-    setTimeout(() => {
-      setKey(value.trim());
-      setLoading(false);
-    }, 600);
+  useEffect(() => {
+    if (!loading) return;
+    const id = setInterval(() => setDots((d) => (d.length >= 3 ? "" : d + ".")), 400);
+    return () => clearInterval(id);
+  }, [loading]);
+
+  async function handleSubmit() {
+    const trimmed = value.trim();
+    if (!trimmed) { setError("API key required"); return; }
+    if (!trimmed.startsWith("sk-")) { setError("Invalid key format — must begin with sk-"); return; }
+    setLoading(true); setError("");
+    await new Promise((r) => setTimeout(r, 800));
+    setKey(trimmed); setLoading(false);
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") handleSubmit();
   }
 
+  const bg = "var(--bg-base)";
+  const fg = "var(--text-primary)";
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: "var(--bg-base)" }}
-    >
-      {/* Background grid */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(var(--border) 1px, transparent 1px),
-            linear-gradient(90deg, var(--border) 1px, transparent 1px)
-          `,
-          backgroundSize: "48px 48px",
-          maskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)",
-          WebkitMaskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)",
-        }}
-      />
-
-      <div className="w-full max-w-sm relative z-10 animate-slide-up">
-
-        {/* Logo mark */}
-        <div className="flex flex-col items-center mb-10">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
-            style={{ background: "var(--cyan-dim)", border: "0.5px solid var(--cyan)" }}
-          >
-            <Shield size={22} style={{ color: "var(--cyan)" }} strokeWidth={1.5} />
+    <div className="min-h-screen flex flex-col" style={{ background: bg, color: fg }}>
+      <header className="flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "var(--cyan)" }}>
+            <Shield size={14} style={{ color: "var(--bg-base)" }} strokeWidth={2} />
           </div>
-          <h1
-            className="font-display font-bold text-2xl tracking-tight"
-            style={{ color: "var(--text-primary)", fontFamily: "'Syne', sans-serif" }}
-          >
-            SentinAI
-          </h1>
-          <p
-            className="text-xs font-mono mt-1 tracking-widest uppercase"
-            style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-          >
-            Security Operations
+          <span className="font-display font-semibold text-sm" style={{ fontFamily: "Syne, sans-serif", color: fg }}>SentinAI</span>
+        </div>
+        <button onClick={toggle} className="w-8 h-8 rounded-md flex items-center justify-center" style={{ color: "var(--text-muted)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}>
+          {theme === "dark" ? <Sun size={15} strokeWidth={1.75} /> : <Moon size={15} strokeWidth={1.75} />}
+        </button>
+      </header>
+
+      <div className="flex-1 flex items-center justify-center px-4">
+        <div className="w-full max-w-[360px] flex flex-col gap-8">
+          <div className="flex flex-col gap-2">
+            <h1 className="font-display font-bold text-[28px] tracking-tight" style={{ fontFamily: "Syne, sans-serif" }}>Welcome back</h1>
+            <p className="text-sm" style={{ fontFamily: "DM Sans, sans-serif", color: "var(--text-secondary)" }}>Enter your API key to access the operations console.</p>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: "var(--text-secondary)" }}>API key</label>
+              <div className="relative">
+                <input type={visible ? "text" : "password"} value={value}
+                  onChange={(e) => { setValue(e.target.value); setError(""); }}
+                  onKeyDown={handleKeyDown} placeholder="sk-sentinai-••••••••"
+                  autoFocus autoComplete="current-password" spellCheck={false}
+                  className="w-full rounded-lg px-3.5 py-2.5 pr-10 text-sm outline-none transition-all"
+                  style={{ background: "var(--bg-surface)", border: error ? "1px solid var(--red)" : "1px solid var(--border-strong)", color: fg, fontFamily: "IBM Plex Mono, monospace", fontSize: "13px" }}
+                  onFocus={(e) => { e.currentTarget.style.border = error ? "1px solid var(--red)" : "1px solid var(--cyan)"; e.currentTarget.style.boxShadow = error ? "0 0 0 3px var(--red-dim)" : "0 0 0 3px var(--cyan-dim)"; }}
+                  onBlur={(e) => { e.currentTarget.style.border = error ? "1px solid var(--red)" : "1px solid var(--border-strong)"; e.currentTarget.style.boxShadow = "none"; }} />
+                <button type="button" tabIndex={-1} onClick={() => setVisible((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}>
+                  {visible ? <EyeOff size={14} strokeWidth={1.75} /> : <Eye size={14} strokeWidth={1.75} />}
+                </button>
+              </div>
+              {error && <p className="text-xs" style={{ color: "var(--red)", fontFamily: "DM Sans, sans-serif" }}>{error}</p>}
+            </div>
+
+            <button type="button" onClick={handleSubmit} disabled={loading}
+              className="w-full rounded-lg py-2.5 flex items-center justify-center gap-2 text-sm font-medium transition-all"
+              style={{ background: "var(--cyan)", color: "var(--bg-base)", fontFamily: "DM Sans, sans-serif", fontWeight: 500, border: "none", cursor: loading ? "wait" : "pointer", opacity: loading ? 0.75 : 1 }}
+              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = "0.88"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = loading ? "0.75" : "1"; }}>
+              {loading ? <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "13px" }}>Verifying{dots}</span>
+                : <><span>Continue</span><ArrowRight size={15} strokeWidth={2} /></>}
+            </button>
+          </div>
+
+          <p className="text-xs text-center" style={{ color: "var(--text-muted)", fontFamily: "DM Sans, sans-serif" }}>
+            Key stored locally for 8 hours.{" "}
+            <span style={{ color: "var(--text-secondary)" }}>Set <code style={{ fontFamily: "IBM Plex Mono, monospace", color: "var(--cyan)" }}>SENTINAI_API_KEY</code> on the server.</span>
           </p>
         </div>
-
-        {/* Card */}
-        <div
-          className="rounded-xl p-6 flex flex-col gap-5"
-          style={{
-            background: "var(--bg-surface)",
-            border:     "0.5px solid var(--border-strong)",
-          }}
-        >
-          <div>
-            <p
-              className="text-xs font-mono tracking-widest"
-              style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              // Authenticate to continue
-            </p>
-          </div>
-
-          {/* Input */}
-          <div className="flex flex-col gap-1.5">
-            <label
-              className="text-[10px] font-mono tracking-widest uppercase"
-              style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              API Key
-            </label>
-            <div className="relative">
-              <input
-                type={visible ? "text" : "password"}
-                value={value}
-                onChange={(e) => { setValue(e.target.value); setError(""); }}
-                onKeyDown={handleKeyDown}
-                placeholder="sk-sentinai-â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                autoFocus
-                className="w-full rounded-md px-3 py-2.5 pr-10 text-sm font-mono outline-none transition-all"
-                style={{
-                  background:  "var(--bg-elevated)",
-                  border:      error ? "0.5px solid var(--red)" : "0.5px solid var(--border-strong)",
-                  color:       "var(--text-primary)",
-                  fontFamily:  "'IBM Plex Mono', monospace",
-                  fontSize:    "13px",
-                }}
-                onFocus={(e) => {
-                  if (!error) e.currentTarget.style.border = "0.5px solid var(--cyan)";
-                  e.currentTarget.style.boxShadow = error ? "0 0 0 3px var(--red-dim)" : "0 0 0 3px var(--cyan-dim)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.border = error ? "0.5px solid var(--red)" : "0.5px solid var(--border-strong)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setVisible((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: "var(--text-muted)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
-              >
-                {visible
-                  ? <EyeOff size={14} strokeWidth={1.75} />
-                  : <Eye    size={14} strokeWidth={1.75} />
-                }
-              </button>
-            </div>
-            {error && (
-              <p
-                className="text-[11px] font-mono"
-                style={{ color: "var(--red)", fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                {error}
-              </p>
-            )}
-          </div>
-
-          {/* Submit */}
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full rounded-md py-2.5 flex items-center justify-center gap-2 text-sm font-medium transition-all"
-            style={{
-              background:  loading ? "var(--cyan-dim)" : "var(--cyan)",
-              color:       loading ? "var(--cyan)"     : "var(--bg-base)",
-              fontFamily:  "'DM Sans', sans-serif",
-              border:      "none",
-              cursor:      loading ? "wait" : "pointer",
-              opacity:     loading ? 0.8 : 1,
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) e.currentTarget.style.opacity = "0.88";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = "1";
-            }}
-          >
-            {loading ? (
-              <>
-                <span
-                  className="w-3.5 h-3.5 rounded-full border-2 animate-spin"
-                  style={{ borderColor: "var(--cyan)", borderTopColor: "transparent" }}
-                />
-                Authenticating
-              </>
-            ) : (
-              <>
-                Authenticate
-                <ArrowRight size={15} strokeWidth={2} />
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Footer hint */}
-        <p
-          className="text-center text-[10px] font-mono mt-5 tracking-wider"
-          style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-        >
-          Set via{" "}
-          <span style={{ color: "var(--cyan)" }}>SENTINAI_API_KEY</span>
-          {" "}env var
-        </p>
       </div>
+
+      <footer className="px-6 py-4 flex items-center justify-between">
+        <span className="text-xs" style={{ color: "var(--text-muted)", fontFamily: "DM Sans, sans-serif" }}>SentinAI v0.1.0</span>
+        <span className="text-xs" style={{ color: "var(--text-muted)", fontFamily: "DM Sans, sans-serif" }}>Self-healing DevOps agent</span>
+      </footer>
     </div>
   );
 }
