@@ -14,7 +14,7 @@ class Settings:
     log_file_path: str = os.getenv("LOG_FILE_PATH", "logs/app.log")
     max_recent_incidents: int = int(os.getenv("MAX_RECENT_INCIDENTS", "100"))
     llm_provider: str = os.getenv("LLM_PROVIDER", "stub")
-    llm_api_key: str = os.getenv("LLM_API_KEY", "")
+    llm_api_key: str = os.getenv("LLM_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
     llm_model: str = os.getenv("LLM_MODEL", "")
     llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "25"))
     llm_max_retries: int = int(os.getenv("LLM_MAX_RETRIES", "3"))
