@@ -1,3 +1,12 @@
+---
+title: SentinAI
+emoji: shield
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 [![CI](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml/badge.svg)](https://github.com/Ebencode-x/sentinai-project/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://python.org)
 [![Tests](https://img.shields.io/badge/tests-686%20passing-brightgreen)]()
