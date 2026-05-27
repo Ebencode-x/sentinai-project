@@ -1,6 +1,6 @@
 ---
 title: SentinAI
-emoji: shield
+emoji: 🛡️
 colorFrom: blue
 colorTo: indigo
 sdk: docker
