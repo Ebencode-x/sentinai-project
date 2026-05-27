@@ -40,19 +40,22 @@ def build_provider(provider: str | None = None) -> LLMProvider:
 def _register_builtins() -> None:
     from sentinai.llm.anthropic import AnthropicProvider  # noqa: PLC0415
     from sentinai.llm.mock import MockProvider  # noqa: PLC0415
+    from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
 
     register_provider("anthropic", AnthropicProvider)
     register_provider("mock", MockProvider)
+    register_provider("smart_stub", SmartStubProvider)
 
 
 def _instantiate(name: str, cls: type[LLMProvider]) -> LLMProvider:
     if name == "anthropic":
         key = os.getenv("ANTHROPIC_API_KEY", "")
         if not key:
-            raise LLMProviderError(
-                "ANTHROPIC_API_KEY env var is required for the anthropic provider."
-            )
+            from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
+            return SmartStubProvider()
         return cls(api_key=key)  # type: ignore[call-arg]
     if name == "mock":
+        return cls()  # type: ignore[call-arg]
+    if name == "smart_stub":
         return cls()  # type: ignore[call-arg]
     raise LLMProviderError(f"No instantiation rule for provider {name!r}.")
