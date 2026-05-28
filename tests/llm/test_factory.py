@@ -17,10 +17,12 @@ def test_build_unknown_provider_raises() -> None:
         build_provider("nonexistent")
 
 
-def test_build_anthropic_without_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_anthropic_without_key_returns_smart_stub(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(LLMProviderError, match="ANTHROPIC_API_KEY"):
-        build_provider("anthropic")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    from sentinai.llm.smart_stub import SmartStubProvider
+    p = build_provider("anthropic")
+    assert isinstance(p, SmartStubProvider)
 
 
 def test_build_anthropic_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
