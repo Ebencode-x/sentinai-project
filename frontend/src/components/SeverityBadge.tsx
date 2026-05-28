@@ -1,20 +1,20 @@
-import clsx from "clsx";
+const SEV: Record<string, { color: string; bg: string; border: string }> = {
+  critical: { color: "var(--red)",    bg: "var(--red-dim)",    border: "var(--red)"    },
+  high:     { color: "var(--amber)",  bg: "var(--amber-dim)",  border: "var(--amber)"  },
+  medium:   { color: "var(--purple)", bg: "var(--purple-dim)", border: "var(--purple)" },
+  low:      { color: "var(--green)",  bg: "var(--green-dim)",  border: "var(--green)"  },
+};
 
-const MAP = {
-  critical: "border-red-500   text-red-400   bg-red-500/5",
-  high:     "border-warn      text-warn      bg-warn/5",
-  medium:   "border-yellow-500 text-yellow-400 bg-yellow-500/5",
-  low:      "border-ok        text-ok        bg-ok/5",
-} as const;
-
-type Severity = keyof typeof MAP;
-
-export default function SeverityBadge({ level }: { level: Severity }) {
+export default function SeverityBadge({ level }: { level: string }) {
+  const s = SEV[level] ?? SEV.low;
   return (
-    <span className={clsx(
-      "inline-block border text-[10px] font-display tracking-widest px-2 py-0.5 rounded-sm uppercase",
-      MAP[level] ?? MAP.low
-    )}>
+    <span style={{
+      display: "inline-block",
+      fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+      letterSpacing: "0.12em", textTransform: "uppercase",
+      padding: "2px 7px", borderRadius: "3px",
+      color: s.color, background: s.bg, border: `0.5px solid ${s.border}`,
+    }}>
       {level}
     </span>
   );
