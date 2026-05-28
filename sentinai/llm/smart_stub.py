@@ -1,4 +1,5 @@
 """Smart stub provider — intelligent offline responses for DevOps/security queries."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +11,7 @@ from sentinai.llm.base import LLMProvider, LLMRequest, LLMResponse
 _RESPONSES: list[tuple[tuple[str, ...], str]] = [
     (
         ("hello", "hi", "hey", "who are you", "what are you"),
-        "I\'m SentinAI Assistant — your AI-powered security operations analyst. "
+        "I'm SentinAI Assistant — your AI-powered security operations analyst. "
         "I monitor your system logs, detect anomalies, and provide actionable remediation. "
         "Ask me about your incidents, system health, scan results, or DevOps best practices.",
     ),
@@ -82,7 +83,7 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
 ]
 
 _FALLBACK = (
-    "I\'m SentinAI Assistant operating in offline mode. "
+    "I'm SentinAI Assistant operating in offline mode. "
     "I can help with: incident triage, log analysis, remediation guidance, "
     "security best practices, API usage, and deployment configuration. "
     "Ask me something specific about your system or DevOps workflow."
@@ -110,9 +111,7 @@ class SmartStubProvider(LLMProvider):
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(request)
-        user_msg = next(
-            (m.content for m in request.messages if m.role == "user"), ""
-        )
+        user_msg = next((m.content for m in request.messages if m.role == "user"), "")
         response = _match_response(user_msg)
         return LLMResponse(
             content=response,
@@ -125,9 +124,7 @@ class SmartStubProvider(LLMProvider):
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[str]:
         self.calls.append(request)
-        user_msg = next(
-            (m.content for m in request.messages if m.role == "user"), ""
-        )
+        user_msg = next((m.content for m in request.messages if m.role == "user"), "")
         response = _match_response(user_msg)
         words = response.split()
         for i, word in enumerate(words):

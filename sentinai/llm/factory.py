@@ -52,6 +52,7 @@ def _instantiate(name: str, cls: type[LLMProvider]) -> LLMProvider:
         key = os.getenv("ANTHROPIC_API_KEY", "")
         if not key:
             from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
+
             return SmartStubProvider()
         return cls(api_key=key)  # type: ignore[call-arg]
     if name == "mock":

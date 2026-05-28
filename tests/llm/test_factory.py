@@ -21,6 +21,7 @@ def test_build_anthropic_without_key_returns_smart_stub(monkeypatch: pytest.Monk
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     from sentinai.llm.smart_stub import SmartStubProvider
+
     p = build_provider("anthropic")
     assert isinstance(p, SmartStubProvider)
 

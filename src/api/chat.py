@@ -109,11 +109,12 @@ async def chat(
     if len(question) > MAX_QUESTION_LEN:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Question too long — max {MAX_QUESTION_LEN} characters"
+            detail=f"Question too long — max {MAX_QUESTION_LEN} characters",
         )
 
     # Strip control characters except newlines/tabs
     import re as _re
+
     question = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", question)
 
     if not question.strip():
