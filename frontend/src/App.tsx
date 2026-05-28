@@ -11,6 +11,7 @@ import Settings from "@/pages/Settings";
 import LoginPage from "@/pages/LoginPage";
 import { useApiKey } from "@/hooks/useApiKey";
 import { useEffect } from "react";
+import { startPolling, stopPolling } from "@/store/sentinai";
 
 function AuthGuard() {
   const { hasKey, clearKey } = useApiKey();
@@ -41,6 +42,11 @@ function AuthGuard() {
 }
 
 function AppRoutes() {
+  useEffect(() => {
+    startPolling(15_000);
+    return () => stopPolling();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthGuard />
