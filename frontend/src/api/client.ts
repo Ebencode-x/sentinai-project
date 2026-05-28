@@ -54,10 +54,27 @@ export interface StatsSnapshot {
   service?: string;
   log_file_path?: string;
   llm_provider?: string;
+  buffer_incident_count?: number;
+  buffer_suggestion_count?: number;
+  dedupe_fingerprints_tracked?: number;
   total_scan_runs?: number;
   last_scan_at_utc?: string | null;
   last_scan_new_incidents?: number;
   dedupe_window_max?: number;
+  recent_suggestions_by_source?: {
+    stub: number;
+    provider: number;
+    fallback: number;
+  };
+  llm_metrics?: {
+    total_suggestions: number;
+    total_fallbacks: number;
+    fallback_rate: number;
+    avg_latency_ms: number | null;
+    p95_latency_ms: number | null;
+    p99_latency_ms: number | null;
+    latency_sample_count: number;
+  };
   total_suggestions: number;
   total_fallbacks: number;
   fallback_rate: number;

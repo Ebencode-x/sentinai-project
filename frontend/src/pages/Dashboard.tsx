@@ -175,53 +175,49 @@ function IncidentRow({ inc }: { inc: Incident }) {
 }
 
 /* bar chart */
-const HOURS = ["00","02","04","06","08","10","12","14","16","18","20","22"];
-const MOCK_BARS = [4,2,2,3,7,10,8,6,13,9,5,3];
-const BAR_MAX   = Math.max(...MOCK_BARS);
+function BarChart({ incidents }: { incidents: import("@/api/client").Incident[] }) {
+  const sevOrder = ["critical","high","medium","low"];
+  const counts = sevOrder.map((sev) => incidents.filter((i) => i.severity === sev).length);
+  const total  = counts.reduce((a, b) => a + b, 0);
+  const barMax = Math.max(...counts, 1);
 
-function BarChart() {
+  const SEV_COLORS_BAR = ["var(--red)","var(--amber)","var(--purple)","var(--cyan)"];
+
   return (
-    <div className="px-4 pb-3">
-      <p
-        className="text-[9px] font-mono tracking-widest uppercase mb-2"
-        style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        Incidents / 24h
+    <div style={{ padding: "10px 16px 12px" }}>
+      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+        letterSpacing: "0.12em", textTransform: "uppercase",
+        color: "var(--text-muted)", marginBottom: "10px" }}>
+        incidents by severity{total > 0 ? ` · ${total} total` : " · no data"}
       </p>
-      <div className="flex items-end gap-1" style={{ height: "56px" }}>
-        {MOCK_BARS.map((v, i) => {
-          const pct = (v / BAR_MAX) * 100;
-          const bg  = v >= 10 ? "var(--red)" : v >= 6 ? "var(--amber)" : "var(--cyan)";
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "52px" }}>
+        {sevOrder.map((sev, i) => {
+          const pct = (counts[i] / barMax) * 100;
           return (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <div
-                className="w-full rounded-t-[2px] transition-all"
-                style={{ height: `${pct}%`, background: bg, minHeight: "3px" }}
-              />
-              <span
-                className="text-[8px] font-mono"
-                style={{ color: "var(--text-hint)", fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                {HOURS[i]}
+            <div key={sev} style={{ flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", gap: "4px", height: "100%" }}>
+              <div style={{ width: "100%", flex: 1, display: "flex", alignItems: "flex-end" }}>
+                <div style={{ width: "100%", height: `${Math.max(pct, counts[i] > 0 ? 8 : 3)}%`,
+                  background: counts[i] > 0 ? SEV_COLORS_BAR[i] : "var(--border)",
+                  borderRadius: "2px 2px 0 0", transition: "height 0.4s ease",
+                  minHeight: "3px" }} />
+              </div>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px",
+                color: counts[i] > 0 ? SEV_COLORS_BAR[i] : "var(--text-muted)" }}>
+                {sev.slice(0,4)}
               </span>
             </div>
           );
         })}
       </div>
-      <div className="flex gap-3 mt-2 pt-2" style={{ borderTop: "0.5px solid var(--border)" }}>
-        {[
-          { color: "var(--red)",   label: "critical/high" },
-          { color: "var(--amber)", label: "medium"        },
-          { color: "var(--cyan)",  label: "low"           },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-            <span
-              className="text-[9px] font-mono"
-              style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              {label}
-            </span>
+      <div style={{ display: "flex", gap: "10px", marginTop: "8px", paddingTop: "8px",
+        borderTop: "0.5px solid var(--border)" }}>
+        {sevOrder.map((sev, i) => (
+          <div key={sev} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%",
+              background: SEV_COLORS_BAR[i] }} />
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+              color: "var(--text-muted)" }}>{sev} · {counts[i]}</span>
           </div>
         ))}
       </div>
@@ -230,40 +226,61 @@ function BarChart() {
 }
 
 /* rule coverage */
-const RULES = [
-  { label: "AUTH001–007", pct: 100, color: "var(--green)"  },
-  { label: "PRIV001–003", pct: 100, color: "var(--green)"  },
-  { label: "SEC001–002",  pct: 100, color: "var(--cyan)"   },
-  { label: "TAINT001–002",pct:  67, color: "var(--amber)"  },
-];
+function RuleCoverage({ stats }: { stats: import("@/api/client").StatsSnapshot | null }) {
+  const m = stats?.llm_metrics;
+  const src = stats?.recent_suggestions_by_source;
 
-function RuleCoverage() {
+  const total    = (src?.stub ?? 0) + (src?.provider ?? 0) + (src?.fallback ?? 0);
+  const provider = src?.provider ?? 0;
+  const fallback = src?.fallback ?? 0;
+  const stub     = src?.stub ?? 0;
+
+  const providerPct = total > 0 ? Math.round((provider / total) * 100) : 0;
+  const fallbackPct = total > 0 ? Math.round((fallback / total) * 100) : 0;
+  const stubPct     = total > 0 ? Math.round((stub     / total) * 100) : 0;
+  const scanPct     = Math.min(100, (stats?.total_scan_runs ?? 0));
+
+  const rows = [
+    { label: "provider responses", pct: providerPct, color: "var(--green)"  },
+    { label: "stub responses",     pct: stubPct,     color: "var(--cyan)"   },
+    { label: "fallback rate",      pct: fallbackPct, color: fallbackPct > 20 ? "var(--red)" : "var(--amber)" },
+    { label: "scan runs",          pct: Math.min(scanPct, 100),
+      color: (stats?.total_scan_runs ?? 0) > 0 ? "var(--green)" : "var(--text-muted)",
+      label2: String(stats?.total_scan_runs ?? 0) },
+  ];
+
   return (
-    <div className="flex flex-col gap-2.5 px-4 pb-4">
-      {RULES.map(({ label, pct, color }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "4px 16px 16px" }}>
+      {m && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px",
+          marginBottom: "4px" }}>
+          {[
+            { k: "avg latency", v: m.avg_latency_ms != null ? `${Math.round(m.avg_latency_ms)}ms` : "—" },
+            { k: "p95",         v: m.p95_latency_ms != null ? `${Math.round(m.p95_latency_ms)}ms` : "—" },
+            { k: "samples",     v: String(m.latency_sample_count) },
+            { k: "fallbacks",   v: String(m.total_fallbacks) },
+          ].map(({ k, v }) => (
+            <div key={k} style={{ background: "var(--bg-base)", borderRadius: "4px",
+              padding: "6px 8px", border: "0.5px solid var(--border)" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px",
+                letterSpacing: "0.1em", color: "var(--text-muted)", textTransform: "uppercase" }}>{k}</div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px",
+                color: "var(--text-primary)", marginTop: "2px" }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {rows.map(({ label, pct, color, label2 }) => (
         <div key={label}>
-          <div className="flex justify-between mb-1">
-            <span
-              className="text-[10px] font-mono"
-              style={{ color: "var(--text-secondary)", fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              {label}
-            </span>
-            <span
-              className="text-[10px] font-mono font-medium"
-              style={{ color, fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              {pct}%
-            </span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+              color: "var(--text-secondary)" }}>{label}</span>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+              color, fontWeight: 500 }}>{label2 ?? `${pct}%`}</span>
           </div>
-          <div
-            className="h-[3px] rounded-full"
-            style={{ background: "var(--bg-elevated)" }}
-          >
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${pct}%`, background: color }}
-            />
+          <div style={{ height: "3px", borderRadius: "2px", background: "var(--bg-elevated)" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: color,
+              borderRadius: "2px", transition: "width 0.4s ease" }} />
           </div>
         </div>
       ))}
@@ -272,46 +289,51 @@ function RuleCoverage() {
 }
 
 /* uptime strip — 90 days */
-const UPTIME_DAYS = Array.from({ length: 90 }, (_, i) => {
-  if ([12, 43, 67].includes(i)) return "red";
-  if ([20, 55, 71].includes(i)) return "amber";
-  return "green";
-});
+function UptimeStrip({ stats }: { stats: import("@/api/client").StatsSnapshot | null }) {
+  const scanRuns  = stats?.total_scan_runs ?? 0;
+  const lastScan  = stats?.last_scan_at_utc;
+  const provider  = stats?.llm_provider ?? "—";
+  const fallRate  = stats?.llm_metrics?.fallback_rate ?? 0;
+  const upColor   = fallRate > 0.3 ? "var(--red)" : fallRate > 0.1 ? "var(--amber)" : "var(--green)";
+  const upLabel   = fallRate > 0.3 ? "degraded" : fallRate > 0.1 ? "partial" : "nominal";
 
-function UptimeStrip() {
+  const lastScanLabel = (() => {
+    if (!lastScan) return "never";
+    try {
+      const d = new Date(lastScan);
+      const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (diff < 60)   return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+      return `${Math.floor(diff/3600)}h ago`;
+    } catch { return lastScan; }
+  })();
+
   return (
-    <div
-      className="flex items-center gap-3 px-4 py-3 rounded-lg"
-      style={{ background: "var(--bg-surface)", border: "0.5px solid var(--border)" }}
-    >
-      <span
-        className="text-[9px] font-mono tracking-widest uppercase shrink-0"
-        style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        Uptime / 90d
-      </span>
-      <div className="flex gap-[2px] flex-1">
-        {UPTIME_DAYS.map((c, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-[2px]"
-            style={{
-              height: "16px",
-              background:
-                c === "green" ? "var(--green)"
-                : c === "amber" ? "var(--amber)"
-                : "var(--red)",
-              opacity: 0.8,
-            }}
-          />
-        ))}
-      </div>
-      <span
-        className="text-sm font-mono font-medium shrink-0"
-        style={{ color: "var(--green)", fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        99.3%
-      </span>
+    <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "10px 16px",
+      borderRadius: "6px", background: "var(--bg-surface)", border: "0.5px solid var(--border)",
+      flexWrap: "wrap" }}>
+      {[
+        { label: "system status", value: upLabel,        color: upColor },
+        { label: "llm provider",  value: provider,       color: "var(--cyan)" },
+        { label: "scan runs",     value: String(scanRuns), color: "var(--text-primary)" },
+        { label: "last scan",     value: lastScanLabel,  color: "var(--text-secondary)" },
+        { label: "fallback rate", value: `${(fallRate * 100).toFixed(1)}%`,
+          color: fallRate > 0.2 ? "var(--amber)" : "var(--green)" },
+      ].map(({ label, value, color }, i, arr) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8px",
+              letterSpacing: "0.12em", textTransform: "uppercase",
+              color: "var(--text-muted)" }}>{label}</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px",
+              color, marginTop: "2px", fontWeight: 500 }}>{value}</div>
+          </div>
+          {i < arr.length - 1 && (
+            <div style={{ width: "1px", height: "28px", background: "var(--border)",
+              flexShrink: 0 }} />
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -439,7 +461,7 @@ export default function Dashboard() {
 
           {/* bar chart */}
           <div style={{ borderTop: "0.5px solid var(--border)" }}>
-            <BarChart />
+            <BarChart incidents={sorted} />
           </div>
         </div>
 
@@ -516,14 +538,14 @@ export default function Dashboard() {
               </span>
             </div>
             <div className="pt-3">
-              <RuleCoverage />
+              <RuleCoverage stats={stats} />
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Uptime strip ───────────────────────────────── */}
-      <UptimeStrip />
+      <UptimeStrip stats={stats} />
     </div>
   );
 }
