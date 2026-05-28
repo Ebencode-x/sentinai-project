@@ -99,6 +99,21 @@ async def chat(
 ) -> StreamingResponse:
     question = body.question.strip()
     if not question:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
+
+    # ── Input sanitization ──────────────────────────────────────────────
+    MAX_QUESTION_LEN = 2000
+    if len(question) > MAX_QUESTION_LEN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Question too long — max {MAX_QUESTION_LEN} characters"
+        )
+
+    # Strip control characters except newlines/tabs
+    import re as _re
+    question = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", question)
+
+    if not question.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty question.")
     incidents = [inc.model_dump(mode="json") for inc in app_state.recent_incidents]
     stats = app_state.stats_snapshot()
