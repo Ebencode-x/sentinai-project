@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { api, type Incident } from "@/api/client";
+import { useSentinaiStore, selectSortedIncidents, selectCriticalCount, selectOpenCount, selectResolvedCount } from "@/store/sentinai";
+import type { Incident } from "@/api/client";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import {
   AlertOctagon,
@@ -17,10 +17,6 @@ import { useNavigate } from "react-router-dom";
 function relativeTime(ts: string) {
   try { return formatDistanceToNow(parseISO(ts), { addSuffix: true }); }
   catch { return ts; }
-}
-
-function severityOrder(s: string) {
-  return ({ critical: 0, high: 1, medium: 2, low: 3 } as Record<string, number>)[s] ?? 4;
 }
 
 /* ── sub-components ──────────────────────────────────────────────────── */
@@ -325,28 +321,12 @@ function UptimeStrip() {
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const { data: incidents = [], isLoading: incLoading } = useQuery({
-    queryKey:       ["incidents"],
-    queryFn:        () => api.incidents().then((r) => r.data),
-    refetchInterval: 15_000,
-  });
-
-  const { data: stats } = useQuery({
-    queryKey:       ["stats"],
-    queryFn:        () => api.stats().then((r) => r.data),
-    refetchInterval: 30_000,
-  });
-
-  /* derived */
-  const sorted = [...incidents].sort(
-    (a, b) =>
-      severityOrder(a.severity) - severityOrder(b.severity) ||
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-
-  const critCount     = incidents.filter((i) => i.severity === "critical").length;
-  const openCount     = incidents.filter((i) => i.status === "open").length;
-  const resolvedToday = incidents.filter((i) => i.status === "resolved").length;
+  const incLoading    = useSentinaiStore((s) => s.incidentsLoading);
+  const stats         = useSentinaiStore((s) => s.stats);
+  const sorted        = useSentinaiStore(selectSortedIncidents);
+  const critCount     = useSentinaiStore(selectCriticalCount);
+  const openCount     = useSentinaiStore(selectOpenCount);
+  const resolvedToday = useSentinaiStore(selectResolvedCount);
 
   return (
     <div className="flex flex-col gap-3 animate-slide-up max-w-[1200px]">
