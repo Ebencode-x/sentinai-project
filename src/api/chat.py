@@ -99,7 +99,10 @@ async def chat(
 ) -> StreamingResponse:
     question = body.question.strip()
     if not question:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Question cannot be empty",
+        )
 
     # ── Input sanitization ──────────────────────────────────────────────
     MAX_QUESTION_LEN = 2000

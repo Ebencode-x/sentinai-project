@@ -7,19 +7,18 @@ from dataclasses import dataclass, field
 
 from sentinai.llm.base import LLMProvider, LLMRequest, LLMResponse
 
-
 _RESPONSES: list[tuple[tuple[str, ...], str]] = [
     (
         ("hello", "hi", "hey", "who are you", "what are you"),
         "I\'m SentinAI Assistant — your AI-powered security operations analyst. "
-        "I monitor your system logs, detect anomalies, and provide actionable remediation guidance. "
+        "I monitor your system logs, detect anomalies, and provide actionable remediation. "
         "Ask me about your incidents, system health, scan results, or DevOps best practices.",
     ),
     (
         ("incident", "incidents", "open", "critical", "alert", "alerts"),
         "Based on live system state: I can see your current incident queue. "
         "Critical incidents require immediate triage — check severity levels and trigger lines. "
-        "For each open incident, review the proposed remediation and apply the patch after validation. "
+        "For each open incident, review the proposed remediation and apply the patch. "
         "Run `POST /scan-now` to trigger a fresh scan cycle.",
     ),
     (
@@ -38,7 +37,7 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
     ),
     (
         ("fix", "patch", "remediation", "suggest", "suggestion", "code", "error"),
-        "Remediation workflow: SentinAI analyzes each incident and generates a structured suggestion "
+        "Remediation workflow: SentinAI analyzes each incident and generates a suggestion "
         "containing a code fix, config change, unified diff patch, and test guidance. "
         "Confidence scores range 0.0–1.0. Apply patches with confidence > 0.7 after peer review. "
         "Always run the suggested unit tests before deploying to production.",
@@ -54,7 +53,7 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
     (
         ("docker", "container", "deploy", "deployment", "kubernetes", "k8s"),
         "Container deployment: SentinAI runs as a Docker container (`ebencodex/sentinai:latest`). "
-        "Set `SENTINAI_API_KEY`, `ANTHROPIC_API_KEY`, and `LLM_PROVIDER=claude` as environment secrets. "
+        "Set `SENTINAI_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_PROVIDER=claude` as env secrets. "
         "For Kubernetes, use a Secret resource — never embed credentials in ConfigMaps. "
         "Health probe: `GET /health/live` for liveness, `GET /health/ready` for readiness.",
     ),
