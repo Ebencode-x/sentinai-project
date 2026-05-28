@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import EmptyState from "@/components/EmptyState";
 import ErrorBanner from "@/components/ErrorBanner";
-import clsx from "clsx";
+import { FileCode, ChevronRight } from "lucide-react";
 
 function renderDiff(raw: string) {
   return raw.split("\n").map((line, i) => {
@@ -12,22 +12,25 @@ function renderDiff(raw: string) {
     const isHunk   = line.startsWith("@@");
     const isMeta   = line.startsWith("---") || line.startsWith("+++");
 
+    const bg = isAdd ? "rgba(34,201,123,0.06)" : isRemove ? "rgba(255,77,106,0.06)"
+      : isHunk ? "rgba(0,212,200,0.05)" : "transparent";
+    const color = isAdd ? "var(--green)" : isRemove ? "var(--red)"
+      : isHunk ? "var(--cyan)" : isMeta ? "var(--text-muted)" : "var(--text-secondary)";
+    const gutter = isAdd ? "+" : isRemove ? "−" : " ";
+
     return (
-      <div
-        key={i}
-        className={clsx(
-          "flex gap-2 px-4 leading-6 text-[11px] font-mono",
-          isAdd    && "bg-ok/5 text-ok",
-          isRemove && "bg-red-500/5 text-red-400",
-          isHunk   && "bg-accent/5 text-accent",
-          isMeta   && "text-muted",
-          !isAdd && !isRemove && !isHunk && !isMeta && "text-text/80"
-        )}
-      >
-        <span className="select-none w-4 shrink-0 text-muted/40">
-          {isAdd ? "+" : isRemove ? "−" : " "}
+      <div key={i} style={{ display: "flex", gap: "0", background: bg, lineHeight: "22px" }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
+          color: "var(--text-muted)", width: "28px", flexShrink: 0, textAlign: "center",
+          borderRight: "0.5px solid var(--border)", userSelect: "none",
+          background: "var(--bg-elevated)" }}>{i + 1}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
+          color: "var(--text-muted)", width: "20px", flexShrink: 0, textAlign: "center",
+          userSelect: "none" }}>{gutter}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
+          color, whiteSpace: "pre", flex: 1, paddingRight: "16px" }}>
+          {line.slice(isAdd || isRemove ? 1 : 0)}
         </span>
-        <span className="whitespace-pre">{line.slice(isAdd || isRemove ? 1 : 0)}</span>
       </div>
     );
   });
@@ -45,57 +48,76 @@ export default function DiffViewer() {
   const active = suggestions.find((s) => s.patch_id === selected) ?? suggestions[0];
 
   return (
-    <div className="space-y-6 animate-slide-up">
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px",
+      animation: "slideUp 0.3s ease-out both" }}>
+
       <div>
-        <h1 className="text-sm font-display tracking-widest text-text">DIFF VIEWER</h1>
-        <p className="text-xs text-muted mt-1 tracking-wide">
-          Syntax-highlighted patch diffs from remediation suggestions
+        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "13px", fontWeight: 700,
+          letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-primary)" }}>
+          Diff Viewer
+        </h1>
+        <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+          color: "var(--text-muted)", marginTop: "4px" }}>
+          patch diffs from remediation suggestions
         </p>
       </div>
 
       {error && <ErrorBanner message="Failed to load suggestions." />}
 
       {isLoading ? (
-        <div className="text-xs text-muted animate-pulse tracking-widest">LOADING…</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+          color: "var(--text-muted)" }}>loading…</div>
       ) : suggestions.length === 0 ? (
-        <EmptyState message="NO PATCHES AVAILABLE — RUN A SCAN FIRST" />
+        <EmptyState message="no patches — run a scan first" />
       ) : (
-        <div className="flex gap-4 min-h-[500px]">
+        <div style={{ display: "flex", gap: "12px", minHeight: "520px" }}>
+
           {/* Patch list */}
-          <div className="w-64 shrink-0 border border-bg-border rounded-sm overflow-hidden">
-            <div className="px-3 py-2 bg-bg-card border-b border-bg-border
-                            text-[10px] text-muted tracking-widest">
-              PATCHES · {suggestions.length}
+          <div style={{ width: "220px", flexShrink: 0, border: "0.5px solid var(--border)",
+            borderRadius: "6px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "8px 12px", background: "var(--bg-elevated)",
+              borderBottom: "0.5px solid var(--border)",
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+              letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+              patches · {suggestions.length}
             </div>
-            <div className="overflow-y-auto">
+            <div style={{ overflowY: "auto", flex: 1 }}>
               {suggestions.map((s) => {
                 const pct = Math.round(s.confidence * 100);
                 const isActive = active?.patch_id === s.patch_id;
+                const confColor = pct >= 80 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--red)";
                 return (
-                  <button
-                    key={s.patch_id}
-                    onClick={() => setSelected(s.patch_id)}
-                    className={clsx(
-                      "w-full text-left px-3 py-3 border-b border-bg-border transition-all",
-                      isActive
-                        ? "bg-accent/5 border-l-2 border-l-accent"
-                        : "hover:bg-bg-card border-l-2 border-l-transparent"
-                    )}
-                  >
-                    <div className="text-[10px] text-accent font-mono truncate">
-                      {s.patch_id.slice(0, 14)}
+                  <button key={s.patch_id} onClick={() => setSelected(s.patch_id)} style={{
+                    width: "100%", textAlign: "left", padding: "10px 12px",
+                    borderBottom: "0.5px solid var(--border)", cursor: "pointer",
+                    background: isActive ? "var(--cyan-dim)" : "var(--bg-surface)",
+                    borderLeft: `2px solid ${isActive ? "var(--cyan)" : "transparent"}`,
+                    transition: "all 0.12s", display: "block",
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-elevated)"; }}
+                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-surface)"; }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <FileCode size={10} strokeWidth={1.75}
+                        style={{ color: isActive ? "var(--cyan)" : "var(--text-muted)", flexShrink: 0 }} />
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+                        color: isActive ? "var(--cyan)" : "var(--text-secondary)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.patch_id.slice(0, 13)}
+                      </span>
                     </div>
-                    <div className="text-[10px] text-muted mt-0.5 truncate">{s.rule}</div>
-                    <div className="mt-1.5 flex items-center gap-1.5">
-                      <div className="flex-1 h-0.5 bg-bg-border rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            pct >= 80 ? "bg-ok" : pct >= 50 ? "bg-warn" : "bg-red-500"
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+                      color: "var(--text-muted)", marginTop: "3px",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.rule}
+                    </div>
+                    <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ flex: 1, height: "2px", background: "var(--border)",
+                        borderRadius: "1px", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`,
+                          background: confColor, borderRadius: "1px" }} />
                       </div>
-                      <span className="text-[9px] text-muted">{pct}%</span>
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+                        color: confColor }}>{pct}%</span>
                     </div>
                   </button>
                 );
@@ -104,38 +126,52 @@ export default function DiffViewer() {
           </div>
 
           {/* Diff panel */}
-          <div className="flex-1 border border-bg-border rounded-sm overflow-hidden flex flex-col">
+          <div style={{ flex: 1, border: "0.5px solid var(--border)", borderRadius: "6px",
+            overflow: "hidden", display: "flex", flexDirection: "column" }}>
             {active ? (
               <>
-                {/* Patch meta */}
-                <div className="px-4 py-3 bg-bg-card border-b border-bg-border flex items-start justify-between gap-4">
+                {/* Meta bar */}
+                <div style={{ padding: "10px 16px", background: "var(--bg-elevated)",
+                  borderBottom: "0.5px solid var(--border)",
+                  display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
                   <div>
-                    <div className="text-xs text-text font-mono">{active.rule}</div>
-                    <div className="text-[10px] text-muted mt-1 leading-relaxed max-w-xl">
-                      {active.explanation}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <ChevronRight size={12} strokeWidth={2} style={{ color: "var(--cyan)" }} />
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
+                        color: "var(--text-primary)" }}>{active.rule}</span>
                     </div>
+                    <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
+                      color: "var(--text-muted)", marginTop: "4px", lineHeight: 1.5, maxWidth: "520px" }}>
+                      {active.explanation}
+                    </p>
                   </div>
-                  <div className="text-[10px] text-muted shrink-0 text-right">
-                    <div>CONFIDENCE</div>
-                    <div className={`text-base font-display ${
-                      active.confidence >= 0.8 ? "text-ok" :
-                      active.confidence >= 0.5 ? "text-warn" : "text-red-400"
-                    }`}>
+                  <div style={{ flexShrink: 0, textAlign: "right" }}>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+                      letterSpacing: "0.1em", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                      confidence
+                    </div>
+                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: "22px", fontWeight: 700,
+                      color: active.confidence >= 0.8 ? "var(--green)"
+                        : active.confidence >= 0.5 ? "var(--amber)" : "var(--red)",
+                      lineHeight: 1.1 }}>
                       {Math.round(active.confidence * 100)}%
                     </div>
                   </div>
                 </div>
 
                 {/* Diff body */}
-                <div className="flex-1 overflow-auto py-2 bg-bg">
+                <div style={{ flex: 1, overflow: "auto",
+                  overflowY: "auto", background: "var(--bg-base)", padding: "8px 0" }}>
                   {active.diff
                     ? renderDiff(active.diff)
-                    : <div className="px-4 py-4 text-xs text-muted">No diff available for this patch.</div>
-                  }
+                    : <div style={{ padding: "16px", fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: "11px", color: "var(--text-muted)" }}>
+                        no diff available for this patch
+                      </div>}
                 </div>
               </>
             ) : (
-              <EmptyState message="SELECT A PATCH" />
+              <EmptyState message="select a patch" />
             )}
           </div>
         </div>

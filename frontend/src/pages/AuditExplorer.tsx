@@ -4,6 +4,7 @@ import { api, type Suggestion } from "@/api/client";
 import { format, parseISO } from "date-fns";
 import EmptyState from "@/components/EmptyState";
 import ErrorBanner from "@/components/ErrorBanner";
+import { Search, X } from "lucide-react";
 
 export default function AuditExplorer() {
   const [q, setQ] = useState("");
@@ -26,60 +27,68 @@ export default function AuditExplorer() {
   }, [suggestions, q]);
 
   return (
-    <div className="space-y-6 animate-slide-up">
-      {/* Header */}
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px",
+      animation: "slideUp 0.3s ease-out both" }}>
+
       <div>
-        <h1 className="text-sm font-display tracking-widest text-text">AUDIT EXPLORER</h1>
-        <p className="text-xs text-muted mt-1 tracking-wide">
-          Searchable record of AI remediation suggestions
+        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "13px", fontWeight: 700,
+          letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-primary)" }}>
+          Audit Explorer
+        </h1>
+        <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+          color: "var(--text-muted)", marginTop: "4px" }}>
+          searchable remediation record
         </p>
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted text-xs">SEARCH //</span>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="rule, explanation, patch_id…"
-          className="w-full bg-bg-card border border-bg-border text-text text-xs
-                     pl-[88px] pr-4 py-3 font-mono rounded-sm outline-none
-                     focus:border-accent transition-all placeholder:text-muted/40"
-        />
+      <div style={{ position: "relative" }}>
+        <Search size={12} strokeWidth={1.75} style={{ position: "absolute", left: "12px",
+          top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+        <input value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="rule · explanation · patch_id"
+          style={{ width: "100%", background: "var(--bg-surface)",
+            border: "0.5px solid var(--border-strong)", borderRadius: "6px",
+            padding: "9px 36px", color: "var(--text-primary)",
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", outline: "none",
+            boxSizing: "border-box" }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--cyan)"; }}
+          onBlur={(e)  => { e.currentTarget.style.borderColor = "var(--border-strong)"; }} />
         {q && (
-          <button
-            onClick={() => setQ("")}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xs"
-          >
-            [CLR]
+          <button onClick={() => setQ("")} style={{ position: "absolute", right: "12px",
+            top: "50%", transform: "translateY(-50%)", background: "none", border: "none",
+            cursor: "pointer", color: "var(--text-muted)", display: "flex" }}>
+            <X size={12} strokeWidth={2} />
           </button>
         )}
       </div>
 
-      {/* Count */}
-      <div className="text-xs text-muted tracking-wider">
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+        color: "var(--text-muted)" }}>
         {filtered.length} of {suggestions.length} records
       </div>
 
       {error && <ErrorBanner message="Failed to load suggestions." />}
 
-      {/* Table */}
       {isLoading ? (
-        <div className="text-xs text-muted animate-pulse tracking-widest">LOADING…</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+          color: "var(--text-muted)" }}>loading…</div>
       ) : filtered.length === 0 ? (
-        <EmptyState message="NO RECORDS FOUND" />
+        <EmptyState message="no records found" />
       ) : (
-        <div className="border border-bg-border rounded-sm overflow-hidden">
+        <div style={{ border: "0.5px solid var(--border)", borderRadius: "6px",
+          overflow: "hidden" }}>
           {/* Header row */}
-          <div className="grid grid-cols-[1fr_2fr_auto_auto] gap-4 px-4 py-2
-                          bg-bg-card border-b border-bg-border
-                          text-[10px] text-muted tracking-widest uppercase">
-            <span>PATCH ID</span>
-            <span>RULE / EXPLANATION</span>
-            <span>CONFIDENCE</span>
-            <span>TIME</span>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 90px 80px",
+            gap: "12px", padding: "8px 16px",
+            background: "var(--bg-elevated)", borderBottom: "0.5px solid var(--border)",
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+            letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+            <span>patch id</span>
+            <span>rule · explanation</span>
+            <span>confidence</span>
+            <span style={{ textAlign: "right" }}>time</span>
           </div>
-
           {filtered.map((s, i) => (
             <AuditRow key={s.patch_id} suggestion={s} index={i} total={filtered.length} />
           ))}
@@ -89,14 +98,8 @@ export default function AuditExplorer() {
   );
 }
 
-function AuditRow({
-  suggestion: s,
-  index,
-  total,
-}: {
-  suggestion: Suggestion;
-  index: number;
-  total: number;
+function AuditRow({ suggestion: s, index, total }: {
+  suggestion: Suggestion; index: number; total: number;
 }) {
   const [open, setOpen] = useState(false);
   const pct = Math.round(s.confidence * 100);
@@ -106,46 +109,55 @@ function AuditRow({
     catch { return "—"; }
   })();
 
-  const barColor =
-    pct >= 80 ? "bg-ok"   :
-    pct >= 50 ? "bg-warn" : "bg-red-500";
+  const confColor = pct >= 80 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--red)";
 
   return (
     <>
-      <div
-        onClick={() => setOpen((o) => !o)}
-        className={`grid grid-cols-[1fr_2fr_auto_auto] gap-4 px-4 py-3 cursor-pointer
-                    text-xs border-b transition-all hover:bg-bg-card/60
-                    ${index === total - 1 ? "border-transparent" : "border-bg-border"}`}
-      >
-        <span className="text-accent font-mono text-[11px] truncate" title={s.patch_id}>
+      <div onClick={() => setOpen((o) => !o)} style={{
+        display: "grid", gridTemplateColumns: "1fr 2fr 90px 80px",
+        gap: "12px", padding: "10px 16px", cursor: "pointer", transition: "background 0.12s",
+        borderBottom: index === total - 1 ? "none" : "0.5px solid var(--border)",
+        background: open ? "var(--bg-elevated)" : "var(--bg-surface)",
+      }}
+      onMouseEnter={(e) => { if (!open) e.currentTarget.style.background = "var(--bg-elevated)"; }}
+      onMouseLeave={(e) => { if (!open) e.currentTarget.style.background = "var(--bg-surface)"; }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+          color: "var(--cyan)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          title={s.patch_id}>
           {s.patch_id.slice(0, 12)}…
         </span>
-        <span className="text-text truncate" title={s.explanation}>
-          <span className="text-muted">{s.rule}</span>
-          {" · "}
-          {s.explanation.slice(0, 60)}{s.explanation.length > 60 ? "…" : ""}
+        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
+          color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis",
+          whiteSpace: "nowrap" }} title={s.explanation}>
+          <span style={{ color: "var(--text-muted)" }}>{s.rule}</span>
+          {" · "}{s.explanation.slice(0, 55)}{s.explanation.length > 55 ? "…" : ""}
         </span>
-        <div className="flex items-center gap-2 w-20">
-          <div className="flex-1 h-1 bg-bg-border rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${barColor}`}
-              style={{ width: `${pct}%` }}
-            />
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ flex: 1, height: "3px", background: "var(--border)",
+            borderRadius: "2px", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`,
+              background: confColor, borderRadius: "2px", transition: "width 0.3s" }} />
           </div>
-          <span className={`text-[10px] w-7 text-right ${barColor.replace("bg-", "text-")}`}>
-            {pct}%
-          </span>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+            color: confColor, width: "28px", textAlign: "right" }}>{pct}%</span>
         </div>
-        <span className="text-muted w-20 text-right">{ts}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+          color: "var(--text-muted)", textAlign: "right" }}>{ts}</span>
       </div>
 
       {open && (
-        <div className="px-4 py-3 bg-bg border-b border-bg-border animate-fade-in">
-          <div className="text-[10px] text-muted tracking-wider mb-2">FULL EXPLANATION</div>
-          <p className="text-xs text-text leading-relaxed">{s.explanation}</p>
-          <div className="mt-2 text-[10px] text-muted/60">
-            PATCH_ID: {s.patch_id}
+        <div style={{ padding: "12px 16px", background: "var(--bg-base)",
+          borderBottom: index === total - 1 ? "none" : "0.5px solid var(--border)",
+          animation: "fadeIn 0.18s ease-out both" }}>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+            letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "6px" }}>
+            full explanation
+          </div>
+          <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
+            color: "var(--text-secondary)", lineHeight: 1.6 }}>{s.explanation}</p>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+            color: "var(--text-muted)", marginTop: "8px" }}>
+            patch_id: {s.patch_id}
           </div>
         </div>
       )}
