@@ -51,6 +51,13 @@ export interface Suggestion {
 }
 
 export interface StatsSnapshot {
+  service?: string;
+  log_file_path?: string;
+  llm_provider?: string;
+  total_scan_runs?: number;
+  last_scan_at_utc?: string | null;
+  last_scan_new_incidents?: number;
+  dedupe_window_max?: number;
   total_suggestions: number;
   total_fallbacks: number;
   fallback_rate: number;

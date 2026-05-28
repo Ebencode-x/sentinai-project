@@ -7,11 +7,12 @@ import IncidentTimeline from "@/pages/IncidentTimeline";
 import AuditExplorer from "@/pages/AuditExplorer";
 import PolicyEditor from "@/pages/PolicyEditor";
 import DiffViewer from "@/pages/DiffViewer";
+import Settings from "@/pages/Settings";
 import LoginPage from "@/pages/LoginPage";
 import { useApiKey } from "@/hooks/useApiKey";
 import { useEffect } from "react";
 
-function AppRoutes() {
+function AuthGuard() {
   const { hasKey, clearKey } = useApiKey();
   useEffect(() => {
     const id = setInterval(() => {
@@ -24,18 +25,25 @@ function AppRoutes() {
   if (!hasKey) return <LoginPage />;
 
   return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="incidents" element={<IncidentTimeline />} />
+        <Route path="audit"     element={<AuditExplorer />} />
+        <Route path="policy"    element={<PolicyEditor />} />
+        <Route path="diff"      element={<DiffViewer />} />
+        <Route path="settings"  element={<Settings />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+}
+
+function AppRoutes() {
+  return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="incidents" element={<IncidentTimeline />} />
-          <Route path="audit" element={<AuditExplorer />} />
-          <Route path="policy" element={<PolicyEditor />} />
-          <Route path="diff" element={<DiffViewer />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      <AuthGuard />
     </BrowserRouter>
   );
 }
