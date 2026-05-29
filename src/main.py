@@ -8,6 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -83,3 +85,16 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(chat_router)
+
+_frontend_dist = __import__("pathlib").Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if _frontend_dist.exists():
+    app.mount("/assets", StaticFiles(directory=_frontend_dist / "assets"), name="assets")
+
+    @app.get("/favicon.svg")
+    async def favicon():
+        return FileResponse(_frontend_dist / "favicon.svg")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        index = _frontend_dist / "index.html"
+        return FileResponse(index)
