@@ -1,4 +1,4 @@
-# SentinAI — production image
+# SentinAI ï¿½ production image
 # Multi-stage: builder installs deps, runtime runs as non-root
 FROM python:3.11-slim AS builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,6 +21,7 @@ WORKDIR /app
 COPY --from=builder /build/deps ./deps
 COPY src ./src
 COPY sentinai ./sentinai
+COPY frontend/dist ./frontend/dist
 RUN mkdir -p logs && chown -R sentinai:sentinai /app
 USER sentinai
 EXPOSE 7860
