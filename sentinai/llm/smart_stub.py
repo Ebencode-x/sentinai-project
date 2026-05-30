@@ -226,7 +226,30 @@ _FALLBACK = (
 )
 
 
+_BLOCKED_PATTERNS = (
+    "api key", "apikey", "secret", "password", "token", "credential",
+    "env", "environment variable", "print all", "reveal", "show me all",
+    "ignore previous", "ignore all", "dan", "jailbreak", "bypass",
+    "system prompt", "your instructions", "what are you told",
+    "anthropic engineer", "admin", "root access", "sudo",
+)
+
+_BLOCKED_RESPONSE = (
+    "I cannot help with that request. "
+    "SentinAI Assistant is scoped to DevOps security operations only: "
+    "incident triage, log analysis, remediation, and observability. "
+    "Attempts to extract credentials or bypass system rules are logged."
+)
+
+
+def _is_blocked(question: str) -> bool:
+    q = question.lower()
+    return any(pattern in q for pattern in _BLOCKED_PATTERNS)
+
+
 def _match_response(question: str) -> str:
+    if _is_blocked(question):
+        return _BLOCKED_RESPONSE + _DEMO_NOTICE
     q = question.lower()
     for keywords, response in _RESPONSES:
         if any(kw in q for kw in keywords):
