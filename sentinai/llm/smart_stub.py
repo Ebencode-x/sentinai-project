@@ -227,11 +227,29 @@ _FALLBACK = (
 
 
 _BLOCKED_PATTERNS = (
-    "api key", "apikey", "secret", "password", "token", "credential",
-    "env", "environment variable", "print all", "reveal", "show me all",
-    "ignore previous", "ignore all", "dan", "jailbreak", "bypass",
-    "system prompt", "your instructions", "what are you told",
-    "anthropic engineer", "admin", "root access", "sudo",
+    "api key",
+    "apikey",
+    "secret",
+    "password",
+    "token",
+    "credential",
+    "env",
+    "environment variable",
+    "print all",
+    "reveal",
+    "show me all",
+    "ignore previous",
+    "ignore all",
+    "dan",
+    "jailbreak",
+    "bypass",
+    "system prompt",
+    "your instructions",
+    "what are you told",
+    "anthropic engineer",
+    "admin",
+    "root access",
+    "sudo",
 )
 
 _BLOCKED_RESPONSE = (
