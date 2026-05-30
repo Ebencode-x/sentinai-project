@@ -10,7 +10,7 @@ sandbox:
   resources:
     memory_mb: 256
     cpus: 0.5
-    timeout_seconds: 120
+    timeout_seconds: 45
   user: sentinai
   drop_capabilities:
     - ALL

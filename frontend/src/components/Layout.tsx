@@ -25,8 +25,8 @@ export default function Layout() {
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
-    if (isBackendUp === false) toast("Backend unreachable — check VITE_API_URL", "error");
-  }, [isBackendUp, toast]);
+    if (isBackendUp === false) toast("Backend unreachable ï¿½ check VITE_API_URL", "error");
+  }, [isBackendUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusOk = ready?.status === "ok";
   const statusDeg = ready?.status === "degraded";

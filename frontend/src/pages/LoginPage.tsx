@@ -2,10 +2,12 @@ import { useState, KeyboardEvent, useEffect } from "react";
 import { useApiKey } from "@/hooks/useApiKey";
 import { Shield, ArrowRight, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
   const { setKey } = useApiKey();
   const { theme, toggle } = useTheme();
+  const navigate = useNavigate();
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const [visible, setVisible] = useState(false);
@@ -21,10 +23,9 @@ export default function LoginPage() {
   async function handleSubmit() {
     const trimmed = value.trim();
     if (!trimmed) { setError("API key required"); return; }
-    if (!trimmed.startsWith("sk-")) { setError("Invalid key format — must begin with sk-"); return; }
+    if (!trimmed.startsWith("sk-")) { setError("Invalid key format ï¿½ must begin with sk-"); return; }
     setLoading(true); setError("");
-    await new Promise((r) => setTimeout(r, 800));
-    setKey(trimmed); setLoading(false);
+    setKey(trimmed); setLoading(false); navigate("/dashboard", { replace: true });
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -63,7 +64,7 @@ export default function LoginPage() {
               <div className="relative">
                 <input type={visible ? "text" : "password"} value={value}
                   onChange={(e) => { setValue(e.target.value); setError(""); }}
-                  onKeyDown={handleKeyDown} placeholder="sk-sentinai-••••••••"
+                  onKeyDown={handleKeyDown} placeholder="sk-sentinai-ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"
                   autoFocus autoComplete="current-password" spellCheck={false}
                   className="w-full rounded-lg px-3.5 py-2.5 pr-10 text-sm outline-none transition-all"
                   style={{ background: "var(--bg-surface)", border: error ? "1px solid var(--red)" : "1px solid var(--border-strong)", color: fg, fontFamily: "IBM Plex Mono, monospace", fontSize: "13px" }}

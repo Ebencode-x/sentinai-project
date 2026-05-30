@@ -10,11 +10,25 @@ import DiffViewer from "@/pages/DiffViewer";
 import Settings from "@/pages/Settings";
 import LoginPage from "@/pages/LoginPage";
 import { useApiKey } from "@/hooks/useApiKey";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { startPolling, stopPolling } from "@/store/sentinai";
 
-function AuthGuard() {
+function PollingManager() {
+  const { hasKey } = useApiKey();
+  const started = useRef(false);
+  useEffect(() => {
+    if (!hasKey) { stopPolling(); started.current = false; return; }
+    if (started.current) return;
+    started.current = true;
+    startPolling(15_000);
+    return () => { stopPolling(); started.current = false; };
+  }, [hasKey]);
+  return null;
+}
+
+function AppRoutes() {
   const { hasKey, clearKey } = useApiKey();
+
   useEffect(() => {
     const id = setInterval(() => {
       const exp = localStorage.getItem("sentinai_key_expiry");
@@ -23,33 +37,28 @@ function AuthGuard() {
     return () => clearInterval(id);
   }, [clearKey]);
 
-  if (!hasKey) return <LoginPage />;
-
-  return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="incidents" element={<IncidentTimeline />} />
-        <Route path="audit"     element={<AuditExplorer />} />
-        <Route path="policy"    element={<PolicyEditor />} />
-        <Route path="diff"      element={<DiffViewer />} />
-        <Route path="settings"  element={<Settings />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
-  );
-}
-
-function AppRoutes() {
-  useEffect(() => {
-    startPolling(15_000);
-    return () => stopPolling();
-  }, []);
-
   return (
     <BrowserRouter>
-      <AuthGuard />
+      <PollingManager />
+      <Routes>
+        <Route
+          path="/login"
+          element={hasKey ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        />
+        <Route
+          path="/"
+          element={hasKey ? <Layout /> : <Navigate to="/login" replace />}
+        >
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="incidents" element={<IncidentTimeline />} />
+          <Route path="audit"     element={<AuditExplorer />} />
+          <Route path="policy"    element={<PolicyEditor />} />
+          <Route path="diff"      element={<DiffViewer />} />
+          <Route path="settings"  element={<Settings />} />
+        </Route>
+        <Route path="*" element={<Navigate to={hasKey ? "/dashboard" : "/login"} replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }
