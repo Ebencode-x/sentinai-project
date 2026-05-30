@@ -50,6 +50,8 @@ def _register_builtins() -> None:
 def _instantiate(name: str, cls: type[LLMProvider]) -> LLMProvider:
     if name == "anthropic":
         key = os.getenv("ANTHROPIC_API_KEY", "")
+        if key.startswith("sk-placeholder") or key == "placeholder":
+            key = ""
         if not key:
             from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
 

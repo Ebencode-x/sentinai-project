@@ -8,85 +8,221 @@ from dataclasses import dataclass, field
 
 from sentinai.llm.base import LLMProvider, LLMRequest, LLMResponse
 
+_DEMO_NOTICE = "\n\n[Demo mode — connect ANTHROPIC_API_KEY for live AI-powered analysis.]"
+
 _RESPONSES: list[tuple[tuple[str, ...], str]] = [
     (
-        ("hello", "hi", "hey", "who are you", "what are you"),
+        ("hello", "hi", "hey", "who are you", "what are you", "introduce", "about"),
         "I'm SentinAI Assistant — your AI-powered security operations analyst. "
-        "I monitor your system logs, detect anomalies, and provide actionable remediation. "
-        "Ask me about your incidents, system health, scan results, or DevOps best practices.",
+        "I monitor logs, detect anomalies, classify incidents by severity, "
+        "and generate actionable remediation steps with confidence scores. "
+        "Ask me about incidents, health, scan results, API usage, or DevOps practices.",
     ),
     (
-        ("incident", "incidents", "open", "critical", "alert", "alerts"),
-        "Based on live system state: I can see your current incident queue. "
-        "Critical incidents require immediate triage — check severity levels and trigger lines. "
-        "For each open incident, review the proposed remediation and apply the patch. "
-        "Run `POST /scan-now` to trigger a fresh scan cycle.",
+        (
+            "incident",
+            "incidents",
+            "open",
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "alert",
+            "alerts",
+            "triage",
+            "queue",
+            "active",
+            "unresolved",
+        ),
+        "Incident triage: SentinAI classifies incidents as critical/high/medium/low. "
+        "Critical incidents require immediate action — isolate the affected service, "
+        "review the trigger line, and apply the generated patch. "
+        "Open incidents appear on your dashboard with severity badges and timestamps. "
+        "Use POST /scan-now to trigger a fresh detection cycle.",
     ),
     (
-        ("scan", "scanning", "scan-now", "log", "logs", "detect", "detection"),
-        "SentinAI scans your application logs continuously, detecting ERROR, EXCEPTION, "
-        "and HTTP 5xx signals. Each scan run deduplicates incidents using a fingerprint window "
-        "to prevent alert fatigue. Trigger a manual scan via `POST /scan-now` with your API key. "
-        "Check `/stats` for scan cadence and last run timestamp.",
+        (
+            "scan",
+            "scanning",
+            "scan-now",
+            "log",
+            "logs",
+            "detect",
+            "detection",
+            "monitor",
+            "monitoring",
+            "tail",
+            "watcher",
+            "pipeline",
+        ),
+        "SentinAI scans logs continuously using a real-time watcher. "
+        "It detects ERROR, EXCEPTION, CRITICAL, and HTTP 5xx signals. "
+        "Each scan deduplicates incidents via fingerprint window to prevent alert fatigue. "
+        "Trigger manual scan: POST /scan-now with X-API-Key header. "
+        "Check /stats for total scan runs, last timestamp, and detection rates.",
     ),
     (
-        ("health", "status", "ready", "live", "uptime", "running"),
-        "System health checks: pipeline state, metrics collector, disk space, audit logger, "
-        "and LLM client are all verified on `/health/ready`. "
-        "If any check fails, inspect container logs immediately. "
-        "Disk minimum threshold is 100MB — ensure log rotation is configured.",
+        (
+            "health",
+            "status",
+            "ready",
+            "live",
+            "uptime",
+            "running",
+            "ping",
+            "alive",
+            "connected",
+            "connection",
+        ),
+        "Health endpoints: GET /health/live for liveness, GET /health/ready for full check. "
+        "Readiness verifies pipeline, metrics, disk, audit logger, and LLM client. "
+        "All checks return JSON: status ok | degraded | error. "
+        "Disk minimum threshold is 100MB — configure log rotation to prevent exhaustion. "
+        "Health probes are Kubernetes-compatible.",
     ),
     (
-        ("fix", "patch", "remediation", "suggest", "suggestion", "code", "error"),
-        "Remediation workflow: SentinAI analyzes each incident and generates a suggestion "
-        "containing a code fix, config change, unified diff patch, and test guidance. "
-        "Confidence scores range 0.0–1.0. Apply patches with confidence > 0.7 after peer review. "
-        "Always run the suggested unit tests before deploying to production.",
+        (
+            "fix",
+            "patch",
+            "remediation",
+            "suggest",
+            "suggestion",
+            "resolve",
+            "solution",
+            "repair",
+            "code",
+            "diff",
+            "apply",
+        ),
+        "Remediation workflow: SentinAI generates a suggestion per incident containing "
+        "a code fix, unified diff patch, and test guidance. "
+        "Confidence scores range 0.0-1.0. Apply patches with confidence > 0.7 "
+        "after peer review. Review at GET /suggestions or /suggestions/latest. "
+        "AST-based semantic validation blocks unsafe patches automatically.",
     ),
     (
-        ("security", "vulnerability", "exploit", "attack", "threat", "risk"),
-        "Security posture: SentinAI monitors for authentication failures, injection patterns, "
-        "privilege escalation attempts, and anomalous request rates. "
-        "For critical security incidents, isolate the affected service immediately, "
-        "rotate credentials, and audit access logs. "
-        "Apply defense-in-depth — WAF, rate limiting, and input validation at every layer.",
+        (
+            "security",
+            "vulnerability",
+            "exploit",
+            "attack",
+            "threat",
+            "risk",
+            "auth",
+            "authentication",
+            "injection",
+            "xss",
+            "sqli",
+            "csrf",
+        ),
+        "Security posture: SentinAI monitors for auth failures, injection patterns, "
+        "privilege escalation, and anomalous request rates. "
+        "PatchSemanticValidator enforces AUTH, PRIV, SEC, TAINT rule sets. "
+        "For critical incidents: isolate service, rotate credentials, audit access logs. "
+        "Defense-in-depth: rate limiting, input validation, security headers at every layer.",
     ),
     (
-        ("docker", "container", "deploy", "deployment", "kubernetes", "k8s"),
-        "Container deployment: SentinAI runs as a Docker container (`ebencodex/sentinai:latest`). "
-        "Set `SENTINAI_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_PROVIDER=claude` as env secrets. "
-        "For Kubernetes, use a Secret resource — never embed credentials in ConfigMaps. "
-        "Health probe: `GET /health/live` for liveness, `GET /health/ready` for readiness.",
+        (
+            "docker",
+            "container",
+            "deploy",
+            "deployment",
+            "kubernetes",
+            "k8s",
+            "helm",
+            "image",
+            "registry",
+            "compose",
+        ),
+        "Deployment: SentinAI runs as ebencodex/sentinai:latest on Docker Hub. "
+        "Required env vars: SENTINAI_API_KEY, ANTHROPIC_API_KEY, LLM_PROVIDER=claude. "
+        "Container runs as non-root (UID 1001) with read-only filesystem. "
+        "For Kubernetes: use Secret resources, never ConfigMaps for credentials. "
+        "Expose port 7860. Liveness: GET /health/live | Readiness: GET /health/ready.",
     ),
     (
-        ("api", "endpoint", "route", "request", "curl", "http"),
-        "SentinAI API endpoints: `/health` (public), `/health/ready`, `/stats`, `/incidents`, "
-        "`/suggestions`, `/suggestions/latest`, `/scan-now`, `/chat`, `/metrics`. "
-        "All protected endpoints require `X-API-Key` header. "
-        "Full interactive docs available at `/docs` (Swagger UI) and `/redoc`.",
+        (
+            "api",
+            "endpoint",
+            "route",
+            "request",
+            "curl",
+            "http",
+            "swagger",
+            "docs",
+            "redoc",
+            "openapi",
+        ),
+        "SentinAI REST API — all endpoints require X-API-Key header except /health. "
+        "Key routes: GET /incidents, GET /suggestions, POST /scan-now, POST /chat, "
+        "GET /stats, GET /metrics, GET /health/live, GET /health/ready. "
+        "Interactive docs: /docs (Swagger UI) and /redoc. "
+        "Rate limiting: per-tenant token bucket, 100 req/min default.",
     ),
     (
-        ("metric", "metrics", "performance", "latency", "p95", "p99"),
-        "LLM metrics tracked: total suggestions, fallback rate, average latency, p95, p99. "
-        "High fallback rates indicate LLM parsing issues — check provider logs. "
+        (
+            "metric",
+            "metrics",
+            "performance",
+            "latency",
+            "p95",
+            "p99",
+            "prometheus",
+            "grafana",
+            "throughput",
+        ),
+        "Metrics: SentinAI tracks suggestion count, fallback rate, avg latency, p95, p99. "
         "Target p95 latency < 3000ms for incident analysis. "
-        "Use `/metrics` endpoint for Prometheus-compatible scraping.",
+        "GET /metrics returns Prometheus-compatible format for Grafana scraping. "
+        "Set up Grafana Cloud free tier with /metrics endpoint for real-time dashboards.",
     ),
     (
-        ("config", "configuration", "env", "environment", "secret", "variable"),
-        "Required environment variables: `SENTINAI_API_KEY` (auth), `ANTHROPIC_API_KEY` (LLM), "
-        "`LLM_PROVIDER=claude`, `LLM_MODEL`, `LOG_FILE_PATH`, `MAX_RECENT_INCIDENTS`. "
-        "Optional: `SENTINAI_SLACK_WEBHOOK_URL` for Slack notifications, "
-        "`SENTINAI_GENERIC_WEBHOOK_URL` for custom integrations. "
-        "Never commit secrets to version control — use HF Secrets or Docker env flags.",
+        (
+            "config",
+            "configuration",
+            "env",
+            "environment",
+            "secret",
+            "setup",
+            "install",
+            "integrate",
+            "webhook",
+            "slack",
+        ),
+        "Required env vars: SENTINAI_API_KEY, ANTHROPIC_API_KEY, LLM_PROVIDER=claude. "
+        "Optional: SENTINAI_SLACK_WEBHOOK_URL for Slack alerts, "
+        "SENTINAI_GENERIC_WEBHOOK_URL for custom integrations, "
+        "MAX_RECENT_INCIDENTS (default 100), LLM_TIMEOUT_SECONDS (default 25). "
+        "Never commit secrets to version control.",
+    ),
+    (
+        ("rate", "limit", "throttle", "quota", "bucket", "429", "too many"),
+        "Rate limiting: per-tenant token bucket algorithm. "
+        "Default: 100 requests/minute per API key. "
+        "Exceeding limit returns HTTP 429 with Retry-After header. "
+        "Implement exponential backoff on 429 responses for high-volume integrations.",
+    ),
+    (
+        ("cost", "price", "pricing", "billing", "usage", "expensive", "token"),
+        "Cost optimization: SentinAI uses Claude Haiku by default — "
+        "the most cost-efficient Anthropic model for real-time operations. "
+        "Prompt caching enabled for system prompts — reduces token usage up to 90%. "
+        "Monitor consumption via /stats and set MAX_RECENT_INCIDENTS to control costs.",
+    ),
+    (
+        ("test", "testing", "pytest", "ci", "pipeline", "coverage", "unit"),
+        "CI pipeline: pytest + coverage (686 tests), ruff linting, bandit security analysis. "
+        "Coverage enforced at 80%+ threshold. "
+        "Pre-commit: ruff check . --fix && ruff format . && pytest tests/ -q. "
+        "All generated patches include test guidance for safe deployment.",
     ),
 ]
 
 _FALLBACK = (
-    "I'm SentinAI Assistant operating in offline mode. "
-    "I can help with: incident triage, log analysis, remediation guidance, "
-    "security best practices, API usage, and deployment configuration. "
-    "Ask me something specific about your system or DevOps workflow."
+    "I'm SentinAI Assistant — your DevOps security operations analyst. "
+    "I can help with: incident triage, log analysis, remediation patches, "
+    "security response, API usage, container deployment, and observability. "
+    "Try: 'What incidents are open?' or 'How do I configure webhooks?'"
 )
 
 
@@ -94,16 +230,16 @@ def _match_response(question: str) -> str:
     q = question.lower()
     for keywords, response in _RESPONSES:
         if any(kw in q for kw in keywords):
-            return response
-    return _FALLBACK
+            return response + _DEMO_NOTICE
+    return _FALLBACK + _DEMO_NOTICE
 
 
 @dataclass
 class SmartStubProvider(LLMProvider):
-    """Intelligent offline provider with DevOps/security domain knowledge.
+    """Offline provider with DevOps/security domain knowledge.
 
-    Zero network calls. Keyword-matched responses with Silicon Valley quality.
-    Activates automatically when ANTHROPIC_API_KEY is unavailable.
+    Zero network calls. Keyword-matched responses.
+    Activates automatically when ANTHROPIC_API_KEY is unavailable or placeholder.
     """
 
     provider_name: str = "smart_stub"
