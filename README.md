@@ -65,16 +65,20 @@ SentinAI watches your application logs in real time. The moment it sees an error
 | Incident deduplication + fingerprinting | ✅ |
 | Claude (Haiku/Sonnet) analysis | ✅ |
 | OpenAI (GPT-4o-mini) analysis | ✅ |
-| Stub mode (no API key required) | ✅ |
+| SmartStub mode — offline fallback, no API key required | ✅ |
 | Prompt caching (90% cost reduction) | ✅ |
 | Structured JSON remediation output | ✅ |
 | Unified diff patch generation | ✅ |
+| AST-level semantic patch validation | ✅ |
+| Prompt injection defense (6 pattern categories) | ✅ |
 | Unit-test guidance per incident | ✅ |
 | Slack rich alert | ✅ |
 | GitHub PR auto-creation | ✅ |
 | Prometheus `/metrics` endpoint | ✅ |
 | FastAPI REST API | ✅ |
 | AI assistant chat (SSE streaming) | ✅ |
+| Real-time observability charts | ✅ |
+| Immutable JSONL audit log | ✅ |
 | Desktop app — Windows (Tauri) | ✅ |
 | CI/CD (GitHub Actions) | ✅ |
 | 686 tests, 100% passing | ✅ |
@@ -141,7 +145,7 @@ SENTINAI_API_KEY=sk-sentinai-dev-local
 | GET | `/incidents` | List recent incidents |
 | GET | `/stats` | Metrics snapshot |
 | POST | `/scan-now` | Trigger manual scan |
-| POST | `/chat` | AI assistant (SSE streaming) |
+| POST | `/api/chat` | AI assistant (SSE streaming) |
 | GET | `/metrics` | Prometheus metrics |
 
 ---
@@ -191,12 +195,12 @@ sentinai-project/
 
 ## Built By
 
-**Ebenezer** — First-year ICT student, Mbeya University of Science and Technology (MUST), Tanzania.
+**Ebenezer Richard Masanja** — First-year ICT student, Mbeya University of Science and Technology (MUST), Tanzania.
 
-> *"I started learning Python 2 months ago. This is what happened."*
+> *"I started learning Python a few months ago. This is what happened."*
 
-- GitHub: [@Ebencode-x](https://github.com/Ebencode-x)
-- LinkedIn: [Ebenezer](https://www.linkedin.com/in/ebenezer-richard-masanja-a49437399)
+[![GitHub](https://img.shields.io/badge/GitHub-Ebencode--x-181717?style=flat-square&logo=github)](https://github.com/Ebencode-x)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-ebenezer--masanja-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/ebenezer-masanja/)
 
 ---
 
