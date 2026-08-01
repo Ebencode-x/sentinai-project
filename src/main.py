@@ -84,6 +84,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 
 _frontend_dist = __import__("pathlib").Path(__file__).resolve().parent.parent / "frontend" / "dist"
