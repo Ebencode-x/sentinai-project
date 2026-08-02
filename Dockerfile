@@ -1,5 +1,13 @@
-# SentinAI � production image
-# Multi-stage: builder installs deps, runtime runs as non-root
+# SentinAI — production image
+# Multi-stage: frontend-builder builds the React app, builder installs
+# Python deps, runtime runs as non-root
+FROM node:20-slim AS frontend-builder
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend ./
+RUN npm run build
+
 FROM python:3.11-slim AS builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -21,7 +29,7 @@ WORKDIR /app
 COPY --from=builder /build/deps ./deps
 COPY src ./src
 COPY sentinai ./sentinai
-COPY frontend/dist ./frontend/dist
+COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 RUN mkdir -p logs && chown -R sentinai:sentinai /app
 USER sentinai
 EXPOSE 7860
