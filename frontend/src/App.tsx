@@ -9,7 +9,7 @@ import PolicyEditor from "@/pages/PolicyEditor";
 import DiffViewer from "@/pages/DiffViewer";
 import Settings from "@/pages/Settings";
 import LoginPage from "@/pages/LoginPage";
-import { useApiKey } from "@/hooks/useApiKey";
+import { useApiKey, ApiKeyProvider } from "@/hooks/useApiKey";
 import { useEffect, useRef } from "react";
 import { startPolling, stopPolling } from "@/store/sentinai";
 
@@ -67,7 +67,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <AppRoutes />
+        <ApiKeyProvider>
+          <AppRoutes />
+        </ApiKeyProvider>
       </ToastProvider>
     </ThemeProvider>
   );
