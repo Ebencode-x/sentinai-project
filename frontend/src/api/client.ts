@@ -19,7 +19,7 @@ http.interceptors.request.use((cfg) => {
 http.interceptors.response.use(
   (res) => res,
   (err: AxiosError) => {
-    if (err.response?.status === 401 || err.response?.status === 403) {
+    if ((err.response?.status === 401 || err.response?.status === 403) && !(err.config as any)?.skipAuthRedirect) {
       // Expired or invalid key — clear session and reload to login screen
       localStorage.removeItem(KEY);
       localStorage.removeItem(EXPIRY);
@@ -107,4 +107,5 @@ export const api = {
   suggestions:      () => http.get<Suggestion[]>("/suggestions"),
   suggestionLatest: () => http.get<Suggestion>("/suggestions/latest"),
   scanNow:          () => http.post<{ detected_incidents: number }>("/scan-now"),
+  validateKey:      () => http.get<StatsSnapshot>("/stats", { skipAuthRedirect: true } as any),
 };

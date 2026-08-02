@@ -32,7 +32,7 @@ export default function LoginPage() {
     setKey(trimmed);
 
     try {
-      await api.stats();
+      await api.validateKey();
       navigate("/dashboard", { replace: true });
     } catch (err) {
       const status = (err as AxiosError).response?.status;
