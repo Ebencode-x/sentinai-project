@@ -3,9 +3,11 @@ import { useApiKey } from "@/hooks/useApiKey";
 import { Shield, ArrowRight, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "react-router-dom";
+import { api } from "@/api/client";
+import type { AxiosError } from "axios";
 
 export default function LoginPage() {
-  const { setKey } = useApiKey();
+  const { setKey, clearKey } = useApiKey();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [value, setValue] = useState("");
@@ -23,9 +25,26 @@ export default function LoginPage() {
   async function handleSubmit() {
     const trimmed = value.trim();
     if (!trimmed) { setError("API key required"); return; }
-    if (!trimmed.startsWith("sk-")) { setError("Invalid key format � must begin with sk-"); return; }
-    setLoading(true); setError("");
-    setKey(trimmed); setLoading(false); navigate("/dashboard", { replace: true });
+    if (!trimmed.startsWith("sk-")) { setError("Invalid key format — must begin with sk-"); return; }
+
+    setLoading(true);
+    setError("");
+    setKey(trimmed);
+
+    try {
+      await api.stats();
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      const status = (err as AxiosError).response?.status;
+      if (status === 401 || status === 403) {
+        setError("Invalid API key — access denied by server.");
+      } else {
+        setError("Could not reach server. Check your connection and try again.");
+      }
+      clearKey();
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -64,7 +83,7 @@ export default function LoginPage() {
               <div className="relative">
                 <input type={visible ? "text" : "password"} value={value}
                   onChange={(e) => { setValue(e.target.value); setError(""); }}
-                  onKeyDown={handleKeyDown} placeholder="sk-sentinai-��������"
+                  onKeyDown={handleKeyDown} placeholder="sk-sentinai-••••••••"
                   autoFocus autoComplete="current-password" spellCheck={false}
                   className="w-full rounded-lg px-3.5 py-2.5 pr-10 text-sm outline-none transition-all"
                   style={{ background: "var(--bg-surface)", border: error ? "1px solid var(--red)" : "1px solid var(--border-strong)", color: fg, fontFamily: "IBM Plex Mono, monospace", fontSize: "13px" }}
