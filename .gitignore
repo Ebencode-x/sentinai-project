@@ -36,3 +36,4 @@ logs/*.log
 =0.12.0
 bandit-report.json
 frontend/node_modules/
+frontend/dist/
