@@ -3,11 +3,11 @@ import { useApiKey } from "@/hooks/useApiKey";
 import { Shield, ArrowRight, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/api/client";
+import { api, KEY } from "@/api/client";
 import type { AxiosError } from "axios";
 
 export default function LoginPage() {
-  const { setKey, clearKey } = useApiKey();
+  const { setKey } = useApiKey();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [value, setValue] = useState("");
@@ -29,19 +29,24 @@ export default function LoginPage() {
 
     setLoading(true);
     setError("");
-    setKey(trimmed);
+
+    // Stage the key so the interceptor attaches it to the validation call,
+    // but don't commit to Context (hasKey) until the backend confirms it —
+    // prevents the dashboard from flashing before an invalid key is rejected.
+    localStorage.setItem(KEY, trimmed);
 
     try {
       await api.validateKey();
+      setKey(trimmed);
       navigate("/dashboard", { replace: true });
     } catch (err) {
+      localStorage.removeItem(KEY);
       const status = (err as AxiosError).response?.status;
       if (status === 401 || status === 403) {
         setError("Invalid API key — access denied by server.");
       } else {
         setError("Could not reach server. Check your connection and try again.");
       }
-      clearKey();
     } finally {
       setLoading(false);
     }
@@ -81,7 +86,7 @@ export default function LoginPage() {
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: "var(--text-secondary)" }}>API key</label>
               <div className="relative">
-                <input type={visible ? "text" : "password"} value={value}
+                <input id="sentinai-api-key" name="sentinai-api-key" type={visible ? "text" : "password"} value={value}
                   onChange={(e) => { setValue(e.target.value); setError(""); }}
                   onKeyDown={handleKeyDown} placeholder="sk-sentinai-••••••••"
                   autoFocus autoComplete="current-password" spellCheck={false}

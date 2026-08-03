@@ -1,7 +1,7 @@
 import axios, { AxiosError } from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
-const KEY      = "sentinai_api_key";
+export const KEY = "sentinai_api_key";
 const EXPIRY   = "sentinai_key_expiry";
 
 export const getApiKey = () => localStorage.getItem(KEY) ?? "";
