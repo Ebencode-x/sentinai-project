@@ -37,3 +37,6 @@ logs/*.log
 bandit-report.json
 frontend/node_modules/
 frontend/dist/
+logs/*.jsonl
+logs/settings.json
+logs/incidents.json

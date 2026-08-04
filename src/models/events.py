@@ -52,3 +52,11 @@ class RemediationSuggestion(BaseModel):
         default=None,
         description="Repo-relative path of the file patched in the auto-patch PR.",
     )
+    autonomy_mode: str | None = Field(
+        default=None,
+        description="Autonomy mode in effect when this suggestion was generated.",
+    )
+    awaiting_approval: bool = Field(
+        default=False,
+        description="True when a patch was proposed but withheld from auto-PR because autonomy_mode is propose_only.",
+    )

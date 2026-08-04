@@ -22,6 +22,7 @@ class Settings:
     incident_dedupe_window: int = int(os.getenv("INCIDENT_DEDUPE_WINDOW", "200"))
     github_token: str = os.getenv("GITHUB_TOKEN", "")
     github_repo: str = os.getenv("GITHUB_REPO", "")
+    autonomy_mode: str = os.getenv("AUTONOMY_MODE", "propose_only")
 
     cors_origins: str = ""  # comma-separated, e.g. https://app.sentinai.io
 

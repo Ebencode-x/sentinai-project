@@ -24,7 +24,9 @@ class RemediationEngine:
         self._stub = StubLLMClient()
         self._github = GitHubClient() if settings.github_token and settings.github_repo else None
 
-    def suggest_fix(self, incident: LogIncident) -> RemediationSuggestion:
+    def suggest_fix(
+        self, incident: LogIncident, autonomy_mode: str = "propose_only"
+    ) -> RemediationSuggestion:
         """Ask the configured LLM client for remediation guidance."""
         if not llm_rate_limiter.consume():
             logger.warning("LLM rate limit exceeded — returning stub fallback.")
@@ -56,6 +58,15 @@ class RemediationEngine:
             latency_ms = (time.perf_counter() - t0) * 1000
             if suggestion is not None:
                 metrics.record(latency_ms=latency_ms, source=suggestion.source)
+        suggestion = suggestion.model_copy(update={"autonomy_mode": autonomy_mode})
+
+        if suggestion.proposed_patch and autonomy_mode != "auto_pr":
+            logger.info(
+                "Autonomy mode is '%s' — withholding auto-PR for incident %s.",
+                autonomy_mode, incident.incident_id,
+            )
+            return suggestion.model_copy(update={"awaiting_approval": True})
+
         if self._github is not None and suggestion.proposed_patch:
             if not pr_rate_limiter.consume():
                 logger.warning(

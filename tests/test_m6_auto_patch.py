@@ -215,7 +215,7 @@ def test_remediation_engine_calls_notify_after_pr_created() -> None:
         mock_gh_cls.return_value = mock_github
 
         engine = RemediationEngine(llm_client=mock_llm)
-        result = engine.suggest_fix(incident)
+        result = engine.suggest_fix(incident, autonomy_mode="auto_pr")
 
     mock_notifier.notify.assert_called_once()
     assert result.pr_url == "https://github.com/org/repo/pull/7"
@@ -268,7 +268,7 @@ def test_remediation_engine_skips_notify_when_pr_url_is_none() -> None:
         mock_gh_cls.return_value = mock_github
 
         engine = RemediationEngine(llm_client=mock_llm)
-        _result = engine.suggest_fix(incident)
+        _result = engine.suggest_fix(incident, autonomy_mode="auto_pr")
 
     mock_notifier.notify.assert_not_called()
 
@@ -295,6 +295,66 @@ def test_remediation_engine_slack_failure_does_not_raise() -> None:
         mock_notifier.notify.side_effect = Exception("Slack is down")
 
         engine = RemediationEngine(llm_client=mock_llm)
-        result = engine.suggest_fix(incident)  # must not raise
+        result = engine.suggest_fix(incident, autonomy_mode="auto_pr")  # must not raise
 
     assert result is not None
+
+
+def test_remediation_engine_propose_only_withholds_pr() -> None:
+    """Default autonomy_mode='propose_only' must NOT open a PR, even with a patch."""
+    incident = _make_incident()
+    llm_suggestion = _make_llm_suggestion()
+
+    mock_llm = MagicMock()
+    mock_llm.analyze_incident.return_value = llm_suggestion
+
+    with (
+        patch("src.services.remediation_engine.settings") as mock_settings,
+        patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls,
+        patch("src.services.remediation_engine.notifier") as mock_notifier,
+    ):
+        mock_settings.github_token = "tok"
+        mock_settings.github_repo = "org/repo"
+
+        mock_github = MagicMock()
+        mock_gh_cls.return_value = mock_github
+
+        engine = RemediationEngine(llm_client=mock_llm)
+        result = engine.suggest_fix(incident)  # default: propose_only
+
+    mock_github.open_patch_pr.assert_not_called()
+    mock_notifier.notify.assert_not_called()
+    assert result.pr_url is None
+    assert result.awaiting_approval is True
+    assert result.autonomy_mode == "propose_only"
+
+
+def test_remediation_engine_auto_pr_sets_autonomy_mode_on_suggestion() -> None:
+    """auto_pr mode must open the PR and stamp autonomy_mode on the returned suggestion."""
+    incident = _make_incident()
+    llm_suggestion = _make_llm_suggestion()
+
+    mock_llm = MagicMock()
+    mock_llm.analyze_incident.return_value = llm_suggestion
+
+    with (
+        patch("src.services.remediation_engine.settings") as mock_settings,
+        patch("src.services.remediation_engine.GitHubClient") as mock_gh_cls,
+        patch("src.services.remediation_engine.notifier") as mock_notifier,
+        patch("src.services.remediation_engine.pr_rate_limiter") as mock_pr_limiter,
+    ):
+        mock_settings.github_token = "tok"
+        mock_settings.github_repo = "org/repo"
+        mock_pr_limiter.consume.return_value = True
+
+        mock_github = MagicMock()
+        mock_github.open_patch_pr.return_value = "https://github.com/org/repo/pull/9"
+        mock_gh_cls.return_value = mock_github
+
+        engine = RemediationEngine(llm_client=mock_llm)
+        result = engine.suggest_fix(incident, autonomy_mode="auto_pr")
+
+    mock_github.open_patch_pr.assert_called_once()
+    assert result.pr_url == "https://github.com/org/repo/pull/9"
+    assert result.awaiting_approval is False
+    assert result.autonomy_mode == "auto_pr"

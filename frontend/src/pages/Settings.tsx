@@ -8,7 +8,7 @@ import { api } from "@/api/client";
 import {
   Terminal, Shield, Activity, Server, Trash2,
   RefreshCw, Eye, EyeOff, CheckCircle, XCircle,
-  Cpu, HardDrive, Zap,
+  Cpu, HardDrive, Zap, GitPullRequest,
 } from "lucide-react";
 
 /* ── tiny section wrapper ─────────────────────────────────────────────── */
@@ -97,6 +97,23 @@ export default function Settings() {
     queryFn:  () => api.stats().then((r) => r.data),
     refetchInterval: 30_000,
   });
+
+  const { data: autonomy, refetch: refetchAutonomy } = useQuery({
+    queryKey: ["autonomy"],
+    queryFn: () => api.settings.getAutonomy().then((r) => r.data),
+  });
+  const [autonomySaving, setAutonomySaving] = useState(false);
+
+  async function setAutonomyMode(mode: "propose_only" | "auto_pr") {
+    if (autonomy?.mode === mode || autonomySaving) return;
+    setAutonomySaving(true);
+    try {
+      await api.settings.setAutonomy(mode);
+      await refetchAutonomy();
+    } finally {
+      setAutonomySaving(false);
+    }
+  }
 
   /* uptime */
   const [uptime, setUptime] = useState(0);
@@ -219,6 +236,41 @@ export default function Settings() {
             </button>
           </div>
         </div>
+      </Section>
+
+      {/* ── Autonomy ─────────────────────────────────────────────────── */}
+      <Section title="Autonomy" icon={GitPullRequest}>
+        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
+          color: "var(--text-muted)", marginBottom: "12px", lineHeight: 1.6 }}>
+          Controls what SentinAI does once it has a proposed fix.
+        </p>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {([
+            { mode: "propose_only" as const, label: "Propose only" },
+            { mode: "auto_pr" as const, label: "Auto-create PR" },
+          ]).map(({ mode, label }) => {
+            const active = autonomy?.mode === mode;
+            return (
+              <button key={mode} onClick={() => setAutonomyMode(mode)} disabled={autonomySaving}
+                style={{
+                  flex: 1, fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+                  letterSpacing: "0.06em", padding: "9px 12px", borderRadius: "6px",
+                  border: active ? "0.5px solid var(--cyan)" : "0.5px solid var(--border-strong)",
+                  background: active ? "var(--bg-base)" : "var(--bg-elevated)",
+                  color: active ? "var(--cyan)" : "var(--text-secondary)",
+                  cursor: autonomySaving ? "wait" : "pointer", transition: "all 0.15s",
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {autonomy?.mode === "auto_pr" && (
+          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9.5px",
+            color: "var(--amber)", lineHeight: 1.5, marginTop: "10px" }}>
+            ⚠ SentinAI will open GitHub PRs automatically for detected patches. Branch protection + required review strongly recommended.
+          </p>
+        )}
       </Section>
 
       {/* ── System diagnostics ───────────────────────────────────────── */}

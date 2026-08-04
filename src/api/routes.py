@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -129,3 +132,19 @@ def suggestions_latest() -> dict:
 def scan_now() -> dict[str, int]:
     count = app_state.scan_logs_once()
     return {"detected_incidents": count}
+
+
+class AutonomyModeUpdate(BaseModel):
+    mode: Literal["propose_only", "auto_pr"]
+
+
+@router.get("/settings/autonomy", dependencies=_PROTECTED, tags=["settings"])
+def get_autonomy_mode() -> dict:
+    return {"mode": app_state.autonomy_mode}
+
+
+@router.patch("/settings/autonomy", dependencies=_PROTECTED, tags=["settings"])
+def set_autonomy_mode(body: AutonomyModeUpdate) -> dict:
+    app_state.set_autonomy_mode(body.mode)
+    logger.info("Autonomy mode changed to: %s", body.mode)
+    return {"mode": app_state.autonomy_mode}

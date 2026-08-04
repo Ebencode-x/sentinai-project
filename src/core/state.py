@@ -36,6 +36,7 @@ class AppState:
     )
     _incident_dedupe: OrderedDict[str, None] = field(default_factory=OrderedDict)
     _scan_lock: threading.Lock = field(default_factory=threading.Lock)
+    autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
     total_scan_runs: int = 0
     last_scan_at_utc: datetime | None = None
     last_scan_new_incidents: int = 0
@@ -57,7 +58,9 @@ class AppState:
 
             self.recent_incidents.append(incident)
             self._save_incidents()
-            suggestion = self.remediation_engine.suggest_fix(incident)
+            suggestion = self.remediation_engine.suggest_fix(
+                incident, autonomy_mode=self.autonomy_mode
+            )
             self.recent_suggestions.append(suggestion)
 
             # Milestone 3: fire Slack + webhook notifications
@@ -136,6 +139,43 @@ class AppState:
             logger.info("[state] Loaded %d incidents from cache", len(self.recent_incidents))
         except Exception as e:
             logger.warning("[state] Failed to load incidents: %s", e)
+
+    def _settings_cache_path(self):
+        import pathlib
+
+        p = pathlib.Path(self.watcher.config.log_file_path).parent / "settings.json"
+        return p
+
+    def _save_settings(self):
+        import json
+
+        try:
+            self._settings_cache_path().write_text(
+                json.dumps({"autonomy_mode": self.autonomy_mode})
+            )
+        except Exception as e:
+            logger.warning("[state] Failed to save settings: %s", e)
+
+    def load_settings(self):
+        import json
+
+        p = self._settings_cache_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text())
+            mode = data.get("autonomy_mode")
+            if mode in ("propose_only", "auto_pr"):
+                self.autonomy_mode = mode
+                logger.info("[state] Loaded autonomy_mode=%s from cache", mode)
+        except Exception as e:
+            logger.warning("[state] Failed to load settings: %s", e)
+
+    def set_autonomy_mode(self, mode: str) -> None:
+        if mode not in ("propose_only", "auto_pr"):
+            raise ValueError(f"Invalid autonomy_mode: {mode}")
+        self.autonomy_mode = mode
+        self._save_settings()
 
 
 app_state = AppState()

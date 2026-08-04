@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
     # Start from end to avoid replaying stale logs during demos.
     app_state.watcher.initialize_position(start_from_end=True)
     app_state.load_incidents()
+    app_state.load_settings()
     yield
 
 

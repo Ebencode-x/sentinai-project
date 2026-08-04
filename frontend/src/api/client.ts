@@ -95,6 +95,10 @@ export interface ReadinessReport {
   }>;
 }
 
+export interface AutonomySettings {
+  mode: "propose_only" | "auto_pr";
+}
+
 // ── API surface ────────────────────────────────────────────────────────────
 
 export const api = {
@@ -108,4 +112,9 @@ export const api = {
   suggestionLatest: () => http.get<Suggestion>("/suggestions/latest"),
   scanNow:          () => http.post<{ detected_incidents: number }>("/scan-now"),
   validateKey:      () => http.get<StatsSnapshot>("/stats", { skipAuthRedirect: true } as any),
+  settings: {
+    getAutonomy: () => http.get<AutonomySettings>("/settings/autonomy"),
+    setAutonomy: (mode: AutonomySettings["mode"]) =>
+      http.patch<AutonomySettings>("/settings/autonomy", { mode }),
+  },
 };
