@@ -355,6 +355,7 @@ def test_remediation_engine_auto_pr_sets_autonomy_mode_on_suggestion() -> None:
         result = engine.suggest_fix(incident, autonomy_mode="auto_pr")
 
     mock_github.open_patch_pr.assert_called_once()
+    mock_notifier.notify.assert_called_once()
     assert result.pr_url == "https://github.com/org/repo/pull/9"
     assert result.awaiting_approval is False
     assert result.autonomy_mode == "auto_pr"

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from pydantic import BaseModel
 
 from src.api.security import require_api_key
 from src.core.health import CheckStatus, run_liveness, run_readiness

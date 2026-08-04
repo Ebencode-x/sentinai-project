@@ -58,5 +58,8 @@ class RemediationSuggestion(BaseModel):
     )
     awaiting_approval: bool = Field(
         default=False,
-        description="True when a patch was proposed but withheld from auto-PR because autonomy_mode is propose_only.",
+        description=(
+            "True when a patch was proposed but withheld from auto-PR "
+            "because autonomy_mode is propose_only."
+        ),
     )
