@@ -99,6 +99,30 @@ export interface AutonomySettings {
   mode: "propose_only" | "auto_pr";
 }
 
+export interface NotificationChannel {
+  id: string;
+  name: string;
+  type: "slack" | "webhook";
+  url: string;
+  severities: Array<"warning" | "critical">;
+  enabled: boolean;
+}
+
+export interface ChannelCreatePayload {
+  name: string;
+  type: "slack" | "webhook";
+  url: string;
+  severities: Array<"warning" | "critical">;
+  enabled?: boolean;
+}
+
+export interface ChannelUpdatePayload {
+  name?: string;
+  url?: string;
+  severities?: Array<"warning" | "critical">;
+  enabled?: boolean;
+}
+
 // ── API surface ────────────────────────────────────────────────────────────
 
 export const api = {
@@ -116,5 +140,12 @@ export const api = {
     getAutonomy: () => http.get<AutonomySettings>("/settings/autonomy"),
     setAutonomy: (mode: AutonomySettings["mode"]) =>
       http.patch<AutonomySettings>("/settings/autonomy", { mode }),
+    listChannels: () => http.get<NotificationChannel[]>("/settings/channels"),
+    createChannel: (payload: ChannelCreatePayload) =>
+      http.post<NotificationChannel>("/settings/channels", payload),
+    updateChannel: (id: string, payload: ChannelUpdatePayload) =>
+      http.patch<NotificationChannel>(`/settings/channels/${id}`, payload),
+    deleteChannel: (id: string) =>
+      http.delete<{ deleted: boolean; id: string }>(`/settings/channels/${id}`),
   },
 };

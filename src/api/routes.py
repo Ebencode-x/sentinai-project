@@ -147,3 +147,46 @@ def set_autonomy_mode(body: AutonomyModeUpdate) -> dict:
     app_state.set_autonomy_mode(body.mode)
     logger.info("Autonomy mode changed to: %s", body.mode)
     return {"mode": app_state.autonomy_mode}
+
+
+class ChannelCreate(BaseModel):
+    name: str
+    type: Literal["slack", "webhook"]
+    url: str
+    severities: list[Literal["warning", "critical"]]
+    enabled: bool = True
+
+
+class ChannelUpdate(BaseModel):
+    name: str | None = None
+    url: str | None = None
+    severities: list[Literal["warning", "critical"]] | None = None
+    enabled: bool | None = None
+
+
+@router.get("/settings/channels", dependencies=_PROTECTED, tags=["settings"])
+def list_channels() -> list[dict]:
+    return app_state.notification_channels
+
+
+@router.post("/settings/channels", dependencies=_PROTECTED, tags=["settings"])
+def create_channel(body: ChannelCreate) -> dict:
+    channel = app_state.add_channel(body.model_dump())
+    logger.info("Notification channel created: %s (%s)", channel["name"], channel["type"])
+    return channel
+
+
+@router.patch("/settings/channels/{channel_id}", dependencies=_PROTECTED, tags=["settings"])
+def patch_channel(channel_id: str, body: ChannelUpdate) -> dict:
+    channel = app_state.update_channel(channel_id, body.model_dump(exclude_unset=True))
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return channel
+
+
+@router.delete("/settings/channels/{channel_id}", dependencies=_PROTECTED, tags=["settings"])
+def remove_channel(channel_id: str) -> dict:
+    deleted = app_state.delete_channel(channel_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return {"deleted": True, "id": channel_id}

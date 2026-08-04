@@ -30,18 +30,50 @@ GENERIC_WEBHOOK_URL: str = os.getenv("SENTINAI_GENERIC_WEBHOOK_URL", "")
 NOTIFICATION_TIMEOUT: float = float(os.getenv("NOTIFICATION_TIMEOUT_SECONDS", "8"))
 
 
-def notify(incident: LogIncident, suggestion: RemediationSuggestion) -> None:
+def notify(
+    incident: LogIncident,
+    suggestion: RemediationSuggestion,
+    channels: list[dict] | None = None,
+) -> None:
     """Fire notifications for a new incident/suggestion pair.
 
-    critical -> Slack + generic webhook
-    warning  -> Slack only
+    channels provided (non-empty) -> route through configured channel list,
+      filtered by channel["severities"] and channel["enabled"].
+    channels is None/empty        -> legacy behaviour (env-var routing):
+      critical -> Slack + generic webhook
+      warning  -> Slack only
     Errors are logged but never raised.
     """
+    if channels:
+        _notify_channels(incident, suggestion, channels)
+        return
+
     if incident.severity == "critical":
         _send_slack(incident, suggestion)
         _send_generic_webhook(incident, suggestion)
     else:
         _send_slack(incident, suggestion)
+
+
+def _notify_channels(
+    incident: LogIncident,
+    suggestion: RemediationSuggestion,
+    channels: list[dict],
+) -> None:
+    """Route a notification through user-configured channels."""
+    for channel in channels:
+        if not channel.get("enabled", True):
+            continue
+        if incident.severity not in channel.get("severities", []):
+            continue
+        url = channel.get("url", "")
+        channel_type = channel.get("type")
+        if channel_type == "slack":
+            _send_slack_to(url, incident, suggestion)
+        elif channel_type == "webhook":
+            _send_webhook_to(url, incident, suggestion)
+        else:
+            logger.warning("Unknown channel type '%s' — skipping.", channel_type)
 
 
 def _send_slack(incident: LogIncident, suggestion: RemediationSuggestion) -> None:
@@ -61,6 +93,54 @@ def _send_slack(incident: LogIncident, suggestion: RemediationSuggestion) -> Non
             logger.debug("Slack notification sent for incident %s", incident.incident_id)
     except Exception as exc:
         logger.warning("Slack notification error for incident %s: %s", incident.incident_id, exc)
+
+
+def _send_slack_to(url: str, incident: LogIncident, suggestion: RemediationSuggestion) -> None:
+    """Send a Slack notification to an arbitrary channel URL (multi-channel routing)."""
+    if not url:
+        return
+    payload = _build_slack_payload(incident, suggestion)
+    try:
+        with httpx.Client(timeout=NOTIFICATION_TIMEOUT) as client:
+            response = client.post(url, json=payload)
+        if not response.is_success:
+            logger.warning(
+                "Slack channel notification failed [%s]: %s",
+                response.status_code,
+                response.text[:200],
+            )
+        else:
+            logger.debug("Slack channel notification sent for incident %s", incident.incident_id)
+    except Exception as exc:
+        logger.warning(
+            "Slack channel notification error for incident %s: %s", incident.incident_id, exc
+        )
+
+
+def _send_webhook_to(url: str, incident: LogIncident, suggestion: RemediationSuggestion) -> None:
+    """Send a generic webhook notification to an arbitrary channel URL (multi-channel routing)."""
+    if not url:
+        return
+    payload = _build_generic_payload(incident, suggestion)
+    try:
+        with httpx.Client(timeout=NOTIFICATION_TIMEOUT) as client:
+            response = client.post(
+                url,
+                json=payload,
+                headers={"Content-Type": "application/json", "User-Agent": "SentinAI/1.0"},
+            )
+        if not response.is_success:
+            logger.warning(
+                "Webhook channel notification failed [%s]: %s",
+                response.status_code,
+                response.text[:200],
+            )
+        else:
+            logger.debug("Webhook channel notification sent for incident %s", incident.incident_id)
+    except Exception as exc:
+        logger.warning(
+            "Webhook channel notification error for incident %s: %s", incident.incident_id, exc
+        )
 
 
 def _build_slack_payload(

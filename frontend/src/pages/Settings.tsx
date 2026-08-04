@@ -8,7 +8,7 @@ import { api } from "@/api/client";
 import {
   Terminal, Shield, Activity, Server, Trash2,
   RefreshCw, Eye, EyeOff, CheckCircle, XCircle,
-  Cpu, HardDrive, Zap, GitPullRequest,
+  Cpu, HardDrive, Zap, GitPullRequest, Bell, Plus, X,
 } from "lucide-react";
 
 /* ── tiny section wrapper ─────────────────────────────────────────────── */
@@ -113,6 +113,54 @@ export default function Settings() {
     } finally {
       setAutonomySaving(false);
     }
+  }
+
+  const { data: channels, refetch: refetchChannels } = useQuery({
+    queryKey: ["channels"],
+    queryFn: () => api.settings.listChannels().then((r) => r.data),
+  });
+  const [showChannelForm, setShowChannelForm] = useState(false);
+  const [channelName, setChannelName] = useState("");
+  const [channelType, setChannelType] = useState<"slack" | "webhook">("slack");
+  const [channelUrl, setChannelUrl] = useState("");
+  const [channelSeverities, setChannelSeverities] = useState<Array<"warning" | "critical">>(["critical"]);
+  const [channelSaving, setChannelSaving] = useState(false);
+
+  function toggleSeverity(sev: "warning" | "critical") {
+    setChannelSeverities((prev) =>
+      prev.includes(sev) ? prev.filter((s) => s !== sev) : [...prev, sev]
+    );
+  }
+
+  async function createChannel() {
+    if (!channelName.trim() || !channelUrl.trim() || channelSeverities.length === 0) return;
+    setChannelSaving(true);
+    try {
+      await api.settings.createChannel({
+        name: channelName.trim(),
+        type: channelType,
+        url: channelUrl.trim(),
+        severities: channelSeverities,
+        enabled: true,
+      });
+      setChannelName("");
+      setChannelUrl("");
+      setChannelSeverities(["critical"]);
+      setShowChannelForm(false);
+      await refetchChannels();
+    } finally {
+      setChannelSaving(false);
+    }
+  }
+
+  async function toggleChannelEnabled(id: string, enabled: boolean) {
+    await api.settings.updateChannel(id, { enabled: !enabled });
+    await refetchChannels();
+  }
+
+  async function deleteChannel(id: string) {
+    await api.settings.deleteChannel(id);
+    await refetchChannels();
   }
 
   /* uptime */
@@ -270,6 +318,122 @@ export default function Settings() {
             color: "var(--amber)", lineHeight: 1.5, marginTop: "10px" }}>
             ⚠ SentinAI will open GitHub PRs automatically for detected patches. Branch protection + required review strongly recommended.
           </p>
+        )}
+      </Section>
+
+      {/* ── Notification Channels ───────────────────────────────────── */}
+      <Section title="Notification Channels" icon={Bell}>
+        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
+          color: "var(--text-muted)", marginBottom: "12px", lineHeight: 1.6 }}>
+          Route incident alerts to Slack or a webhook, filtered by severity.
+        </p>
+
+        {channels && channels.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+            {channels.map((ch) => (
+              <div key={ch.id} style={{
+                display: "flex", alignItems: "center", gap: "10px",
+                padding: "8px 10px", borderRadius: "6px",
+                border: "0.5px solid var(--border)", background: "var(--bg-elevated)",
+                opacity: ch.enabled ? 1 : 0.5,
+              }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+                  color: "var(--text-secondary)", flex: 1 }}>
+                  {ch.name} <span style={{ color: "var(--text-muted)" }}>· {ch.type}</span>
+                </span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+                  color: "var(--text-muted)" }}>
+                  {ch.severities.join(", ")}
+                </span>
+                <button onClick={() => toggleChannelEnabled(ch.id, ch.enabled)} style={{
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
+                  padding: "3px 8px", borderRadius: "4px", cursor: "pointer",
+                  border: `0.5px solid ${ch.enabled ? "var(--green)" : "var(--border-strong)"}`,
+                  background: "transparent",
+                  color: ch.enabled ? "var(--green)" : "var(--text-muted)",
+                }}>
+                  {ch.enabled ? "ON" : "OFF"}
+                </button>
+                <button onClick={() => deleteChannel(ch.id)} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-muted)", padding: "3px", display: "flex",
+                }}>
+                  <X size={12} strokeWidth={1.75} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!showChannelForm ? (
+          <button onClick={() => setShowChannelForm(true)} style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+            letterSpacing: "0.06em", padding: "7px 14px",
+            border: "0.5px solid var(--border-strong)", borderRadius: "6px",
+            background: "var(--bg-elevated)", color: "var(--text-secondary)",
+            cursor: "pointer",
+          }}>
+            <Plus size={11} strokeWidth={1.75} />
+            add channel
+          </button>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <input value={channelName} onChange={(e) => setChannelName(e.target.value)}
+              placeholder="Channel name" style={{
+                background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
+                borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
+                fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", outline: "none",
+              }} />
+            <div style={{ display: "flex", gap: "8px" }}>
+              <select value={channelType} onChange={(e) => setChannelType(e.target.value as "slack" | "webhook")}
+                style={{
+                  flex: 1, background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
+                  borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
+                }}>
+                <option value="slack">Slack</option>
+                <option value="webhook">Webhook</option>
+              </select>
+            </div>
+            <input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)}
+              placeholder="https://hooks.slack.com/... or https://your-endpoint.com" style={{
+                background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
+                borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
+                fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", outline: "none",
+              }} />
+            <div style={{ display: "flex", gap: "12px" }}>
+              {(["warning", "critical"] as const).map((sev) => (
+                <label key={sev} style={{
+                  display: "flex", alignItems: "center", gap: "6px", cursor: "pointer",
+                  fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+                  color: "var(--text-secondary)",
+                }}>
+                  <input type="checkbox" checked={channelSeverities.includes(sev)}
+                    onChange={() => toggleSeverity(sev)} />
+                  {sev}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button onClick={createChannel} disabled={channelSaving} style={{
+                flex: 1, fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+                padding: "7px 14px", borderRadius: "6px",
+                border: "0.5px solid var(--cyan)", background: "var(--bg-base)",
+                color: "var(--cyan)", cursor: channelSaving ? "wait" : "pointer",
+              }}>
+                {channelSaving ? "saving…" : "save channel"}
+              </button>
+              <button onClick={() => setShowChannelForm(false)} style={{
+                fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
+                padding: "7px 14px", borderRadius: "6px",
+                border: "0.5px solid var(--border-strong)", background: "var(--bg-elevated)",
+                color: "var(--text-secondary)", cursor: "pointer",
+              }}>
+                cancel
+              </button>
+            </div>
+          </div>
         )}
       </Section>
 

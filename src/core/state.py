@@ -37,6 +37,7 @@ class AppState:
     _incident_dedupe: OrderedDict[str, None] = field(default_factory=OrderedDict)
     _scan_lock: threading.Lock = field(default_factory=threading.Lock)
     autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
+    notification_channels: list[dict] = field(default_factory=list)
     total_scan_runs: int = 0
     last_scan_at_utc: datetime | None = None
     last_scan_new_incidents: int = 0
@@ -64,7 +65,7 @@ class AppState:
             self.recent_suggestions.append(suggestion)
 
             # Milestone 3: fire Slack + webhook notifications
-            notify(incident, suggestion)
+            notify(incident, suggestion, channels=self.notification_channels)
 
             added += 1
 
@@ -151,7 +152,12 @@ class AppState:
 
         try:
             self._settings_cache_path().write_text(
-                json.dumps({"autonomy_mode": self.autonomy_mode})
+                json.dumps(
+                    {
+                        "autonomy_mode": self.autonomy_mode,
+                        "notification_channels": self.notification_channels,
+                    }
+                )
             )
         except Exception as e:
             logger.warning("[state] Failed to save settings: %s", e)
@@ -168,6 +174,10 @@ class AppState:
             if mode in ("propose_only", "auto_pr"):
                 self.autonomy_mode = mode
                 logger.info("[state] Loaded autonomy_mode=%s from cache", mode)
+            channels = data.get("notification_channels")
+            if isinstance(channels, list):
+                self.notification_channels = channels
+                logger.info("[state] Loaded %d notification channel(s) from cache", len(channels))
         except Exception as e:
             logger.warning("[state] Failed to load settings: %s", e)
 
@@ -176,6 +186,41 @@ class AppState:
             raise ValueError(f"Invalid autonomy_mode: {mode}")
         self.autonomy_mode = mode
         self._save_settings()
+
+    def add_channel(self, data: dict) -> dict:
+        import uuid
+
+        channel = {
+            "id": str(uuid.uuid4()),
+            "name": data["name"],
+            "type": data["type"],
+            "url": data["url"],
+            "severities": data["severities"],
+            "enabled": data.get("enabled", True),
+        }
+        self.notification_channels.append(channel)
+        self._save_settings()
+        return channel
+
+    def update_channel(self, channel_id: str, updates: dict) -> dict | None:
+        for ch in self.notification_channels:
+            if ch["id"] == channel_id:
+                for key in ("name", "url", "severities", "enabled"):
+                    if key in updates and updates[key] is not None:
+                        ch[key] = updates[key]
+                self._save_settings()
+                return ch
+        return None
+
+    def delete_channel(self, channel_id: str) -> bool:
+        before = len(self.notification_channels)
+        self.notification_channels = [
+            c for c in self.notification_channels if c["id"] != channel_id
+        ]
+        if len(self.notification_channels) != before:
+            self._save_settings()
+            return True
+        return False
 
 
 app_state = AppState()
