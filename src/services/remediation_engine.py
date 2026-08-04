@@ -63,7 +63,8 @@ class RemediationEngine:
         if suggestion.proposed_patch and autonomy_mode != "auto_pr":
             logger.info(
                 "Autonomy mode is '%s' — withholding auto-PR for incident %s.",
-                autonomy_mode, incident.incident_id,
+                autonomy_mode,
+                incident.incident_id,
             )
             return suggestion.model_copy(update={"awaiting_approval": True})
 
