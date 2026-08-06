@@ -25,6 +25,7 @@ class Settings:
     autonomy_mode: str = os.getenv("AUTONOMY_MODE", "propose_only")
 
     cors_origins: str = os.getenv("SENTINAI_CORS_ORIGINS", "")  # comma-separated
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./sentinai.db")
 
 
 settings = Settings()

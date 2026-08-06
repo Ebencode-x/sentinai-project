@@ -40,3 +40,5 @@ frontend/dist/
 logs/*.jsonl
 logs/settings.json
 logs/incidents.json
+sentinai.db
+*.db
