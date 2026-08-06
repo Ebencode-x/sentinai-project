@@ -24,7 +24,7 @@ class Settings:
     github_repo: str = os.getenv("GITHUB_REPO", "")
     autonomy_mode: str = os.getenv("AUTONOMY_MODE", "propose_only")
 
-    cors_origins: str = ""  # comma-separated, e.g. https://app.sentinai.io
+    cors_origins: str = os.getenv("SENTINAI_CORS_ORIGINS", "")  # comma-separated
 
 
 settings = Settings()
