@@ -126,20 +126,21 @@ Existing endpoints in `routes.py`: swap `dependencies=_PROTECTED`
 `chat.py` moves off `require_tenant`/`Tenant` onto the same `require_user`
 dependency — collapses the two parallel systems into one.
 
-## 6. Open questions before writing code
+## 6. Decisions (Aug 6 2026)
 
-1. Storage: SQLite vs extending the JSON file-cache for `Account`-scoped
-   data? (affects `app_state.py` more than auth itself)
-2. JWT vs opaque session token — leaning opaque, confirm.
-3. Password reset flow — in scope for this sprint or deferred?
-4. Does the *frontend* need a full login page + auth context/route guards
-   built in this sprint, or can #3 ship backend-only first with frontend as
-   a fast-follow?
-5. Multi-account support (multiple *separate* teams on one deployment) is
-   explicitly NOT in scope here — this is one account with multiple users.
-   Confirm that matches intent before modeling `Account` at all (if truly
-   single-team forever, `Account` table could be skipped and `User` simply
-   gets a `role`, simplifying the whole design).
+1. Storage: **SQLite** — JSON file-cache doesn't give safe concurrent
+   writes for multi-user; SQLite is durable without adding Postgres
+   overhead at this scale.
+2. Session mechanism: **opaque session token** — immediate revocation on
+   role change / user removal, over JWT's stateless-but-hard-to-revoke
+   tradeoff.
+3. Password reset: **deferred** — not a blocker for shipping the core
+   auth/role system; fast-follow.
+4. Frontend login UI: **in scope this sprint** — needed to actually
+   exercise the system end-to-end, not backend-only.
+5. Account model: **keep the `Account` table now**, even with a single row
+   — retrofitting account_id onto already-scoped data later is riskier
+   than the small cost of including it from the start.
 
 ## 7. Suggested build order (once questions above are answered)
 
