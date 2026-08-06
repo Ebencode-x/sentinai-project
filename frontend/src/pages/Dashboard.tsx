@@ -358,38 +358,27 @@ export default function Dashboard() {
         <MetricCard
           label="Critical"
           value={incLoading ? "—" : critCount}
-          delta="+2 vs yesterday"
-          deltaDir="up"
           topColor="var(--red)"
           valueColor="var(--red)"
-          sparkPoints="0,28 10,26 20,22 30,26 40,16 50,20 64,6"
         />
         <MetricCard
           label="Open incidents"
           value={incLoading ? "—" : openCount}
-          delta="+5 this week"
-          deltaDir="up"
           topColor="var(--amber)"
           valueColor="var(--amber)"
-          sparkPoints="0,18 10,20 20,16 30,14 40,18 50,12 64,8"
         />
         <MetricCard
           label="Resolved 24h"
           value={incLoading ? "—" : resolvedToday}
-          delta={stats?.avg_latency_ms != null ? `MTTR ${stats.avg_latency_ms}ms` : "MTTR —"}
-          deltaDir="down"
+          delta={stats?.llm_metrics?.avg_latency_ms != null ? `avg latency ${Math.round(stats.llm_metrics.avg_latency_ms)}ms` : undefined}
           topColor="var(--green)"
           valueColor="var(--green)"
-          sparkPoints="0,26 10,22 20,18 30,14 40,12 50,8 64,4"
         />
         <MetricCard
-          label="Policy violations"
+          label="Suggestions generated"
           value={stats?.total_suggestions ?? "—"}
-          delta="stable"
-          deltaDir="neutral"
           topColor="var(--cyan)"
           valueColor="var(--cyan)"
-          sparkPoints="0,16 10,14 20,18 30,15 40,17 50,13 64,15"
         />
       </div>
 

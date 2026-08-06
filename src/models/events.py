@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -27,6 +28,8 @@ class RemediationSuggestion(BaseModel):
     - test_guidance: unit-test hints to validate the patch before rollout.
     """
 
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     summary: str
     proposed_code_fix: str
     proposed_config_change: str

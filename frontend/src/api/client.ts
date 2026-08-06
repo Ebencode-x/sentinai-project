@@ -42,12 +42,21 @@ export interface Incident {
 }
 
 export interface Suggestion {
-  patch_id: string;
-  rule: string;
+  id: string;
+  created_at_utc: string;
+  summary: string;
+  proposed_code_fix: string;
+  proposed_config_change: string;
   confidence: number;
-  explanation: string;
-  diff: string;
-  created_at?: string;
+  risks: string;
+  source: "stub" | "provider" | "fallback";
+  provider_error?: string | null;
+  proposed_patch?: string | null;
+  test_guidance?: string | null;
+  pr_url?: string | null;
+  patch_file?: string | null;
+  autonomy_mode?: string | null;
+  awaiting_approval?: boolean;
 }
 
 export interface StatsSnapshot {

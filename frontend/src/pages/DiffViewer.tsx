@@ -45,7 +45,7 @@ export default function DiffViewer() {
     refetchInterval: 30_000,
   });
 
-  const active = suggestions.find((s) => s.patch_id === selected) ?? suggestions[0];
+  const active = suggestions.find((s) => s.id === selected) ?? suggestions[0];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px",
@@ -84,10 +84,10 @@ export default function DiffViewer() {
             <div style={{ overflowY: "auto", flex: 1 }}>
               {suggestions.map((s) => {
                 const pct = Math.round(s.confidence * 100);
-                const isActive = active?.patch_id === s.patch_id;
+                const isActive = active?.id === s.id;
                 const confColor = pct >= 80 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--red)";
                 return (
-                  <button key={s.patch_id} onClick={() => setSelected(s.patch_id)} style={{
+                  <button key={s.id} onClick={() => setSelected(s.id)} style={{
                     width: "100%", textAlign: "left", padding: "10px 12px",
                     borderBottom: "0.5px solid var(--border)", cursor: "pointer",
                     background: isActive ? "var(--cyan-dim)" : "var(--bg-surface)",
@@ -102,13 +102,13 @@ export default function DiffViewer() {
                       <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
                         color: isActive ? "var(--cyan)" : "var(--text-secondary)",
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {s.patch_id.slice(0, 13)}
+                        {s.id.slice(0, 13)}
                       </span>
                     </div>
                     <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
                       color: "var(--text-muted)", marginTop: "3px",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {s.rule}
+                      {s.source}
                     </div>
                     <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
                       <div style={{ flex: 1, height: "2px", background: "var(--border)",
@@ -138,11 +138,11 @@ export default function DiffViewer() {
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <ChevronRight size={12} strokeWidth={2} style={{ color: "var(--cyan)" }} />
                       <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-                        color: "var(--text-primary)" }}>{active.rule}</span>
+                        color: "var(--text-primary)" }}>{active.source}</span>
                     </div>
                     <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
                       color: "var(--text-muted)", marginTop: "4px", lineHeight: 1.5, maxWidth: "520px" }}>
-                      {active.explanation}
+                      {active.summary}
                     </p>
                   </div>
                   <div style={{ flexShrink: 0, textAlign: "right" }}>
@@ -162,8 +162,8 @@ export default function DiffViewer() {
                 {/* Diff body */}
                 <div style={{ flex: 1, overflow: "auto",
                   overflowY: "auto", background: "var(--bg-base)", padding: "8px 0" }}>
-                  {active.diff
-                    ? renderDiff(active.diff)
+                  {active.proposed_patch
+                    ? renderDiff(active.proposed_patch)
                     : <div style={{ padding: "16px", fontFamily: "'IBM Plex Mono', monospace",
                         fontSize: "11px", color: "var(--text-muted)" }}>
                         no diff available for this patch

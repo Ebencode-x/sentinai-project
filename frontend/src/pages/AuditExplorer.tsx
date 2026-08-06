@@ -20,9 +20,9 @@ export default function AuditExplorer() {
     const lower = q.toLowerCase();
     return suggestions.filter(
       (s) =>
-        s.rule.toLowerCase().includes(lower) ||
-        s.explanation.toLowerCase().includes(lower) ||
-        s.patch_id.toLowerCase().includes(lower)
+        s.source.toLowerCase().includes(lower) ||
+        s.summary.toLowerCase().includes(lower) ||
+        s.id.toLowerCase().includes(lower)
     );
   }, [suggestions, q]);
 
@@ -46,7 +46,7 @@ export default function AuditExplorer() {
         <Search size={12} strokeWidth={1.75} style={{ position: "absolute", left: "12px",
           top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
         <input value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="rule · explanation · patch_id"
+          placeholder="source · summary · id"
           style={{ width: "100%", background: "var(--bg-surface)",
             border: "0.5px solid var(--border-strong)", borderRadius: "6px",
             padding: "9px 36px", color: "var(--text-primary)",
@@ -84,13 +84,13 @@ export default function AuditExplorer() {
             background: "var(--bg-elevated)", borderBottom: "0.5px solid var(--border)",
             fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
             letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-            <span>patch id</span>
-            <span>rule · explanation</span>
+            <span>id</span>
+            <span>source · summary</span>
             <span>confidence</span>
             <span style={{ textAlign: "right" }}>time</span>
           </div>
           {filtered.map((s, i) => (
-            <AuditRow key={s.patch_id} suggestion={s} index={i} total={filtered.length} />
+            <AuditRow key={s.id} suggestion={s} index={i} total={filtered.length} />
           ))}
         </div>
       )}
@@ -105,7 +105,7 @@ function AuditRow({ suggestion: s, index, total }: {
   const pct = Math.round(s.confidence * 100);
 
   const ts = (() => {
-    try { return s.created_at ? format(parseISO(s.created_at), "MMM dd HH:mm") : "—"; }
+    try { return s.created_at_utc ? format(parseISO(s.created_at_utc), "MMM dd HH:mm") : "—"; }
     catch { return "—"; }
   })();
 
@@ -123,14 +123,14 @@ function AuditRow({ suggestion: s, index, total }: {
       onMouseLeave={(e) => { if (!open) e.currentTarget.style.background = "var(--bg-surface)"; }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
           color: "var(--cyan)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-          title={s.patch_id}>
-          {s.patch_id.slice(0, 12)}…
+          title={s.id}>
+          {s.id.slice(0, 12)}…
         </span>
         <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
           color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis",
-          whiteSpace: "nowrap" }} title={s.explanation}>
-          <span style={{ color: "var(--text-muted)" }}>{s.rule}</span>
-          {" · "}{s.explanation.slice(0, 55)}{s.explanation.length > 55 ? "…" : ""}
+          whiteSpace: "nowrap" }} title={s.summary}>
+          <span style={{ color: "var(--text-muted)" }}>{s.source}</span>
+          {" · "}{s.summary.slice(0, 55)}{s.summary.length > 55 ? "…" : ""}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <div style={{ flex: 1, height: "3px", background: "var(--border)",
@@ -151,13 +151,13 @@ function AuditRow({ suggestion: s, index, total }: {
           animation: "fadeIn 0.18s ease-out both" }}>
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
             letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "6px" }}>
-            full explanation
+            full summary
           </div>
           <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
-            color: "var(--text-secondary)", lineHeight: 1.6 }}>{s.explanation}</p>
+            color: "var(--text-secondary)", lineHeight: 1.6 }}>{s.summary}</p>
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
             color: "var(--text-muted)", marginTop: "8px" }}>
-            patch_id: {s.patch_id}
+            id: {s.id}
           </div>
         </div>
       )}
