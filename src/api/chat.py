@@ -11,6 +11,7 @@ from sentinai.llm.base import LLMMessage, LLMRequest, Role
 from sentinai.llm.exceptions import LLMAuthError, LLMProviderError
 from sentinai.llm.factory import build_provider
 from src.api.auth import Tenant, require_tenant
+from src.api.middleware import enforce_rate_limit
 from src.core.state import app_state
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,8 @@ async def chat(
     body: ChatRequest,
     tenant: Tenant = Depends(require_tenant),
 ) -> StreamingResponse:
+    enforce_rate_limit(tenant)
+
     question = body.question.strip()
     if not question:
         raise HTTPException(
