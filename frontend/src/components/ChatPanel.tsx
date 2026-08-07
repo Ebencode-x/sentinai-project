@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { getApiKey } from "@/api/client";
+import { getStoredToken } from "@/hooks/useAuth";
 
 interface Message {
   role: "user" | "assistant";
@@ -44,12 +44,12 @@ export default function ChatPanel() {
     try {
       const BASE = import.meta.env.VITE_API_URL ?? "/api";
       const url = BASE === "/api" ? "/api/chat" : BASE + "/chat";
-      const key = getApiKey();
+      const token = getStoredToken();
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(key ? { "X-API-Key": key } : {}),
+          ...(token ? { "X-Session-Token": token } : {}),
         },
         body: JSON.stringify({ question: q }),
       });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApiKey } from "@/hooks/useApiKey";
+import { useAuth } from "@/hooks/useAuth";
 import { useHealth } from "@/hooks/useHealth";
 import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import {
   Terminal, Shield, Activity, Server, Trash2,
-  RefreshCw, Eye, EyeOff, CheckCircle, XCircle,
+  RefreshCw, CheckCircle, XCircle,
   Cpu, HardDrive, Zap, GitPullRequest, Bell, Plus, X,
 } from "lucide-react";
 
@@ -75,17 +75,15 @@ function CheckRow({ name, status, latency }: { name: string; status: string; lat
 
 /* ── main ─────────────────────────────────────────────────────────────── */
 export default function Settings() {
-  const { clearKey }      = useApiKey();
+  const { user, logout }  = useAuth();
   const { ready, live, isBackendUp } = useHealth();
   const { theme, toggle } = useTheme();
   const navigate          = useNavigate();
 
-  /* api key field */
-  const storedKey = localStorage.getItem("sentinai_api_key") ?? "";
-  const expiry    = localStorage.getItem("sentinai_key_expiry");
-  const expiresAt = expiry ? new Date(parseInt(expiry, 10)).toLocaleString() : "—";
+  /* session info */
+  const expiry    = localStorage.getItem("sentinai_session_expiry");
+  const expiresAt = expiry ? new Date(expiry).toLocaleString() : "—";
 
-  const [keyVisible, setKeyVisible] = useState(false);
   const [apiUrl, setApiUrl]         = useState(
     localStorage.getItem("sentinai_api_url") ?? (import.meta.env.VITE_API_URL ?? "/api")
   );
@@ -182,13 +180,9 @@ export default function Settings() {
   }
 
   function handleSignOut() {
-    clearKey();
-    navigate("/");
+    logout();
+    navigate("/login");
   }
-
-  const maskedKey = storedKey
-    ? storedKey.slice(0, 8) + "•".repeat(Math.max(0, storedKey.length - 12)) + storedKey.slice(-4)
-    : "—";
 
   const overallOk = isBackendUp && ready?.status === "ok";
 
@@ -209,23 +203,9 @@ export default function Settings() {
 
       {/* ── Authentication ───────────────────────────────────────────── */}
       <Section title="Authentication" icon={Shield}>
-        <KV label="KEY" value={
-          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-              color: "var(--text-secondary)" }}>
-              {keyVisible ? storedKey || "—" : maskedKey}
-            </span>
-            <button onClick={() => setKeyVisible((v) => !v)}
-              style={{ background: "none", border: "none", cursor: "pointer",
-                color: "var(--text-muted)", padding: 0, display: "flex" }}>
-              {keyVisible
-                ? <EyeOff size={11} strokeWidth={1.75} />
-                : <Eye    size={11} strokeWidth={1.75} />}
-            </button>
-          </span>
-        } />
-        <KV label="EXPIRES" value={expiresAt} />
-        <KV label="TTL" value="8h from login" />
+        <KV label="EMAIL" value={user?.email ?? "—"} />
+        <KV label="ROLE" value={(user?.role ?? "—").toUpperCase()} />
+        <KV label="SESSION EXPIRES" value={expiresAt} />
         <div style={{ marginTop: "12px" }}>
           <button onClick={handleSignOut} style={{
             display: "flex", alignItems: "center", gap: "6px",
@@ -493,13 +473,12 @@ export default function Settings() {
           </button>
         </div>
         <KV label="FONT STACK" value="Syne · DM Sans · IBM Plex Mono" mono={false} />
-        <KV label="VERSION"    value="v0.1.0" />
+        <KV label="VERSION"    value="v0.2.0" />
       </Section>
 
       {/* ── Build info ───────────────────────────────────────────────── */}
       <Section title="Build" icon={HardDrive}>
-        <KV label="RELEASE"    value="v0.1.0" />
-        <KV label="COMMIT"     value="1125be6" />
+        <KV label="RELEASE"    value="v0.2.0" />
         <KV label="PROVIDER"   value={stats ? "claude" : "—"} />
         <KV label="LOG PATH"   value={stats?.log_file_path ?? "—"} />
         <KV label="DEDUPE WIN" value={stats?.dedupe_window_max != null ? `${stats.dedupe_window_max}` : "—"} />

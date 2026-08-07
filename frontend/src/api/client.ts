@@ -1,17 +1,14 @@
 import axios, { AxiosError } from "axios";
+import { getStoredToken } from "@/hooks/useAuth";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
-export const KEY = "sentinai_api_key";
-const EXPIRY   = "sentinai_key_expiry";
-
-export const getApiKey = () => localStorage.getItem(KEY) ?? "";
 
 export const http = axios.create({ baseURL: BASE_URL });
 
-// ── Request: attach API key ───────────────────────────────────────────────
+// ── Request: attach session token ──────────────────────────────────────────
 http.interceptors.request.use((cfg) => {
-  const key = getApiKey();
-  if (key) cfg.headers["X-API-Key"] = key;
+  const token = getStoredToken();
+  if (token) cfg.headers["X-Session-Token"] = token;
   return cfg;
 });
 
@@ -20,9 +17,10 @@ http.interceptors.response.use(
   (res) => res,
   (err: AxiosError) => {
     if ((err.response?.status === 401 || err.response?.status === 403) && !(err.config as any)?.skipAuthRedirect) {
-      // Expired or invalid key — clear session and reload to login screen
-      localStorage.removeItem(KEY);
-      localStorage.removeItem(EXPIRY);
+      // Expired or invalid session — clear it and reload to login screen
+      localStorage.removeItem("sentinai_session_token");
+      localStorage.removeItem("sentinai_session_user");
+      localStorage.removeItem("sentinai_session_expiry");
       window.location.reload();
     }
     return Promise.reject(err);
@@ -136,15 +134,14 @@ export interface ChannelUpdatePayload {
 
 export const api = {
   health: {
-    live:  () => http.get<{ status: string; service: string }>("/health/live"),
+    live: () => http.get<{ status: string; service: string }>("/health/live"),
     ready: () => http.get<ReadinessReport>("/health/ready"),
   },
-  stats:            () => http.get<StatsSnapshot>("/stats"),
-  incidents:        () => http.get<Incident[]>("/incidents"),
-  suggestions:      () => http.get<Suggestion[]>("/suggestions"),
+  stats: () => http.get<StatsSnapshot>("/stats"),
+  incidents: () => http.get<Incident[]>("/incidents"),
+  suggestions: () => http.get<Suggestion[]>("/suggestions"),
   suggestionLatest: () => http.get<Suggestion>("/suggestions/latest"),
-  scanNow:          () => http.post<{ detected_incidents: number }>("/scan-now"),
-  validateKey:      () => http.get<StatsSnapshot>("/stats", { skipAuthRedirect: true } as any),
+  scanNow: () => http.post<{ detected_incidents: number }>("/scan-now"),
   settings: {
     getAutonomy: () => http.get<AutonomySettings>("/settings/autonomy"),
     setAutonomy: (mode: AutonomySettings["mode"]) =>
