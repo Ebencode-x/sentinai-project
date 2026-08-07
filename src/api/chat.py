@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field
 from sentinai.llm.base import LLMMessage, LLMRequest, Role
 from sentinai.llm.exceptions import LLMAuthError, LLMProviderError
 from sentinai.llm.factory import build_provider
-from src.api.auth import Tenant, require_tenant
-from src.api.middleware import enforce_rate_limit
+from src.api.deps import require_user
 from src.core.state import app_state
+from src.db.models import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -96,10 +96,8 @@ async def _stream_sse(question: str, system: str):
 @router.post("/chat", summary="AI assistant streaming chat", tags=["assistant"])
 async def chat(
     body: ChatRequest,
-    tenant: Tenant = Depends(require_tenant),
+    user: User = Depends(require_user),
 ) -> StreamingResponse:
-    enforce_rate_limit(tenant)
-
     question = body.question.strip()
     if not question:
         raise HTTPException(
@@ -125,7 +123,7 @@ async def chat(
     incidents = [inc.model_dump(mode="json") for inc in app_state.recent_incidents]
     stats = app_state.stats_snapshot()
     system = _build_system_prompt(incidents, stats)
-    logger.info("[chat] tenant=%s q_len=%d", tenant.name, len(question))
+    logger.info("[chat] user=%s q_len=%d", user.email, len(question))
     return StreamingResponse(
         _stream_sse(question, system),
         media_type="text/event-stream",

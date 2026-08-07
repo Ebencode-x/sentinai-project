@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.api.auth_routes import router as auth_router
 from src.api.chat import router as chat_router
 from src.api.routes import router
 from src.core.config import settings
@@ -80,13 +81,14 @@ app.add_middleware(
     allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["X-API-Key", "Content-Type", "Accept"],
+    allow_headers=["X-API-Key", "X-Session-Token", "Content-Type", "Accept"],
     max_age=600,  # preflight cache: 10 minutes
 )
 
 app.include_router(router)
 app.include_router(router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
 _frontend_dist = __import__("pathlib").Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():

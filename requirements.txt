@@ -11,3 +11,5 @@ anthropic>=0.101.0
 alembic==1.19.0
 SQLAlchemy==2.0.51
 bcrypt==5.0.0
+psycopg2-binary==2.9.12
+email-validator==2.3.0

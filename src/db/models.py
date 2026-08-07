@@ -45,7 +45,7 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    users: Mapped[list["User"]] = relationship(back_populates="account")
+    users: Mapped[list[User]] = relationship(back_populates="account")
 
 
 class User(Base):
@@ -59,8 +59,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
-    account: Mapped["Account"] = relationship(back_populates="users")
-    sessions: Mapped[list["Session"]] = relationship(
+    account: Mapped[Account] = relationship(back_populates="users")
+    sessions: Mapped[list[Session]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -75,7 +75,7 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped["User"] = relationship(back_populates="sessions")
+    user: Mapped[User] = relationship(back_populates="sessions")
 
     @property
     def is_expired(self) -> bool:

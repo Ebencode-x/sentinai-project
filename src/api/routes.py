@@ -10,15 +10,18 @@ from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
-from src.api.security import require_api_key
+from src.api.deps import require_role, require_user
 from src.core.health import CheckStatus, run_liveness, run_readiness
 from src.core.metrics import shared_registry
 from src.core.state import app_state
+from src.db.models import Role
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-_PROTECTED = [Depends(require_api_key)]
+require_admin = require_role(Role.ADMIN)
+_PROTECTED = [Depends(require_user)]
+_ADMIN_ONLY = [Depends(require_admin)]
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +130,7 @@ def suggestions_latest() -> dict:
     return app_state.recent_suggestions[-1].model_dump(mode="json")
 
 
-@router.post("/scan-now", dependencies=_PROTECTED, tags=["incidents"])
+@router.post("/scan-now", dependencies=_ADMIN_ONLY, tags=["incidents"])
 def scan_now() -> dict[str, int]:
     count = app_state.scan_logs_once()
     return {"detected_incidents": count}
@@ -142,7 +145,7 @@ def get_autonomy_mode() -> dict:
     return {"mode": app_state.autonomy_mode}
 
 
-@router.patch("/settings/autonomy", dependencies=_PROTECTED, tags=["settings"])
+@router.patch("/settings/autonomy", dependencies=_ADMIN_ONLY, tags=["settings"])
 def set_autonomy_mode(body: AutonomyModeUpdate) -> dict:
     app_state.set_autonomy_mode(body.mode)
     logger.info("Autonomy mode changed to: %s", body.mode)
@@ -169,14 +172,14 @@ def list_channels() -> list[dict]:
     return app_state.notification_channels
 
 
-@router.post("/settings/channels", dependencies=_PROTECTED, tags=["settings"])
+@router.post("/settings/channels", dependencies=_ADMIN_ONLY, tags=["settings"])
 def create_channel(body: ChannelCreate) -> dict:
     channel = app_state.add_channel(body.model_dump())
     logger.info("Notification channel created: %s (%s)", channel["name"], channel["type"])
     return channel
 
 
-@router.patch("/settings/channels/{channel_id}", dependencies=_PROTECTED, tags=["settings"])
+@router.patch("/settings/channels/{channel_id}", dependencies=_ADMIN_ONLY, tags=["settings"])
 def patch_channel(channel_id: str, body: ChannelUpdate) -> dict:
     channel = app_state.update_channel(channel_id, body.model_dump(exclude_unset=True))
     if channel is None:
@@ -184,7 +187,7 @@ def patch_channel(channel_id: str, body: ChannelUpdate) -> dict:
     return channel
 
 
-@router.delete("/settings/channels/{channel_id}", dependencies=_PROTECTED, tags=["settings"])
+@router.delete("/settings/channels/{channel_id}", dependencies=_ADMIN_ONLY, tags=["settings"])
 def remove_channel(channel_id: str) -> dict:
     deleted = app_state.delete_channel(channel_id)
     if not deleted:

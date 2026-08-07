@@ -36,14 +36,20 @@ def make_suggestion(summary="Fix it", source="stub"):
 
 @pytest.fixture
 def client():
-    from src.api.auth import RateLimitTier, Tenant, require_tenant
-    from src.api.security import require_api_key
+    from src.api.deps import require_user
+    from src.api.routes import require_admin
+    from src.db.models import Role, User
 
-    async def mock_tenant():
-        return Tenant(name="test", tier=RateLimitTier.INTERNAL)
+    def mock_user():
+        return User(
+            id="test-user-id",
+            account_id="test-account-id",
+            email="test@sentinai.local",
+            role=Role.ADMIN,
+        )
 
-    app.dependency_overrides[require_tenant] = mock_tenant
-    app.dependency_overrides[require_api_key] = mock_tenant
+    app.dependency_overrides[require_user] = mock_user
+    app.dependency_overrides[require_admin] = mock_user
     c = TestClient(app)
     yield c
     app.dependency_overrides.clear()
