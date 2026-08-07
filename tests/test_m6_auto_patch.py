@@ -86,7 +86,7 @@ def _mock_github_client(
 
 def test_open_patch_pr_returns_pr_url() -> None:
     client = _mock_github_client()
-    url = client.open_patch_pr(
+    result = client.open_patch_pr(
         incident_id="abcdef12-xxxx",
         trigger_line="ERROR boom",
         summary="Something broke.",
@@ -94,7 +94,9 @@ def test_open_patch_pr_returns_pr_url() -> None:
         test_guidance="Assert fix is True.",
         confidence=0.9,
     )
-    assert url == "https://github.com/org/repo/pull/42"
+    assert result["pr_url"] == "https://github.com/org/repo/pull/42"
+    assert result["pr_number"] == 42
+    assert result["branch_name"].startswith("sentinai/fix-")
 
 
 def test_open_patch_pr_creates_branch_with_correct_prefix() -> None:
@@ -116,7 +118,7 @@ def test_open_patch_pr_branch_already_exists_still_opens_pr() -> None:
     client = _mock_github_client()
     exc = GithubException(422, {"message": "Reference already exists"}, {})
     client._repo.create_git_ref.side_effect = exc
-    url = client.open_patch_pr(
+    result = client.open_patch_pr(
         incident_id="abcdef12-xxxx",
         trigger_line="ERROR boom",
         summary="Summary.",
@@ -124,7 +126,7 @@ def test_open_patch_pr_branch_already_exists_still_opens_pr() -> None:
         test_guidance="",
         confidence=0.75,
     )
-    assert url == "https://github.com/org/repo/pull/42"
+    assert result["pr_url"] == "https://github.com/org/repo/pull/42"
 
 
 def test_open_patch_pr_returns_none_on_branch_creation_error() -> None:
@@ -211,7 +213,11 @@ def test_remediation_engine_calls_notify_after_pr_created() -> None:
         mock_settings.github_repo = "org/repo"
 
         mock_github = MagicMock()
-        mock_github.open_patch_pr.return_value = "https://github.com/org/repo/pull/7"
+        mock_github.open_patch_pr.return_value = {
+            "pr_url": "https://github.com/org/repo/pull/7",
+            "pr_number": 7,
+            "branch_name": "sentinai/fix-abcdef12",
+        }
         mock_gh_cls.return_value = mock_github
 
         engine = RemediationEngine(llm_client=mock_llm)
@@ -219,6 +225,7 @@ def test_remediation_engine_calls_notify_after_pr_created() -> None:
 
     mock_notifier.notify.assert_called_once()
     assert result.pr_url == "https://github.com/org/repo/pull/7"
+    assert result.pr_number == 7
 
 
 def test_remediation_engine_skips_pr_when_no_proposed_patch() -> None:
@@ -348,7 +355,11 @@ def test_remediation_engine_auto_pr_sets_autonomy_mode_on_suggestion() -> None:
         mock_pr_limiter.consume.return_value = True
 
         mock_github = MagicMock()
-        mock_github.open_patch_pr.return_value = "https://github.com/org/repo/pull/9"
+        mock_github.open_patch_pr.return_value = {
+            "pr_url": "https://github.com/org/repo/pull/9",
+            "pr_number": 9,
+            "branch_name": "sentinai/fix-abcdef12",
+        }
         mock_gh_cls.return_value = mock_github
 
         engine = RemediationEngine(llm_client=mock_llm)
@@ -357,5 +368,6 @@ def test_remediation_engine_auto_pr_sets_autonomy_mode_on_suggestion() -> None:
     mock_github.open_patch_pr.assert_called_once()
     mock_notifier.notify.assert_called_once()
     assert result.pr_url == "https://github.com/org/repo/pull/9"
+    assert result.pr_number == 9
     assert result.awaiting_approval is False
     assert result.autonomy_mode == "auto_pr"

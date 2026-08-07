@@ -76,7 +76,7 @@ class RemediationEngine:
                 )
                 return suggestion
             try:
-                pr_url = self._github.open_patch_pr(
+                pr_result = self._github.open_patch_pr(
                     incident_id=incident.incident_id,
                     trigger_line=incident.trigger_line,
                     summary=suggestion.summary,
@@ -84,8 +84,16 @@ class RemediationEngine:
                     test_guidance=suggestion.test_guidance or "",
                     confidence=suggestion.confidence,
                 )
-                suggestion = suggestion.model_copy(update={"pr_url": pr_url})
-                if pr_url:
+                if pr_result:
+                    suggestion = suggestion.model_copy(
+                        update={
+                            "pr_url": pr_result.get("pr_url"),
+                            "pr_number": pr_result.get("pr_number"),
+                            "patch_file": pr_result.get("patch_file"),
+                            "before_sha": pr_result.get("before_sha"),
+                            "branch_name": pr_result.get("branch_name"),
+                        }
+                    )
                     try:
                         notifier.notify(incident, suggestion)
                     except Exception as slack_exc:

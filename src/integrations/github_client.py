@@ -30,8 +30,8 @@ class GitHubClient:
         test_guidance: str,
         confidence: float,
         patch_file: str | None = None,
-    ) -> str | None:
-        """Create a branch and open a PR. Returns PR URL on success, None on failure."""
+    ) -> dict | None:
+        """Create a branch and open a PR. Returns commit metadata on success, None on failure."""
         branch_name = f"sentinai/fix-{incident_id[:8]}"
         timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -50,13 +50,12 @@ class GitHubClient:
                 logger.error("Failed to create branch: %s", exc)
                 return None
 
-        committed = self._commit_patch(
+        commit_meta = self._commit_patch(
             branch_name=branch_name,
             proposed_patch=proposed_patch,
-            patch_file=patch_file,
             incident_id=incident_id,
         )
-        if not committed:
+        if commit_meta is None:
             logger.warning("Patch commit skipped — PR will be description-only")
 
         pr_body = self._build_pr_body(
@@ -77,7 +76,14 @@ class GitHubClient:
                 base=default_branch,
             )
             logger.info("Opened PR #%s: %s", pr.number, pr.html_url)
-            return pr.html_url
+            result = {
+                "pr_url": pr.html_url,
+                "pr_number": pr.number,
+                "branch_name": branch_name,
+            }
+            if commit_meta:
+                result.update(commit_meta)
+            return result
         except GithubException as exc:
             logger.error("Failed to open PR: %s", exc)
             return None
@@ -86,18 +92,37 @@ class GitHubClient:
         self,
         branch_name: str,
         proposed_patch: str,
-        patch_file: str | None,
         incident_id: str,
-    ) -> bool:
-        """Parse unified diff, apply to live file, commit to branch. Returns True on success."""
-        if not proposed_patch or not patch_file:
-            logger.debug("No patch_file provided — skipping file commit")
-            return False
+    ) -> dict | None:
+        """Parse unified diff, apply to live file, commit to branch.
+
+        Derives the target file path from the diff's own header instead of
+        requiring a separate patch_file argument. Returns commit metadata
+        (patch_file, before_sha) on success, None on skip/failure.
+        """
+        if not proposed_patch:
+            logger.debug("No proposed_patch — skipping file commit")
+            return None
         try:
             patch_set = unidiff.PatchSet(proposed_patch)
         except Exception as exc:
             logger.warning("Failed to parse unified diff: %s", exc)
-            return False
+            return None
+
+        if len(patch_set) == 0:
+            logger.warning("Diff parsed but contains no file entries")
+            return None
+        if len(patch_set) > 1:
+            logger.warning(
+                "Diff touches %d files — only single-file patches are auto-committed",
+                len(patch_set),
+            )
+            return None
+
+        patched_file = patch_set[0]
+        patch_file = patched_file.path
+        if patch_file.startswith(("a/", "b/")):
+            patch_file = patch_file[2:]
 
         try:
             gh_file = self._repo.get_contents(patch_file, ref=branch_name)
@@ -105,17 +130,17 @@ class GitHubClient:
             file_sha = gh_file.sha
         except GithubException as exc:
             logger.warning("Could not fetch %s from GitHub: %s", patch_file, exc)
-            return False
+            return None
 
         try:
             patched = self._apply_patch(original, patch_set)
         except Exception as exc:
             logger.warning("Patch application failed: %s", exc)
-            return False
+            return None
 
         if patched == original:
             logger.info("Patch produced no changes — skipping commit")
-            return False
+            return None
 
         try:
             self._repo.update_file(
@@ -126,10 +151,10 @@ class GitHubClient:
                 branch=branch_name,
             )
             logger.info("Committed patch to %s on %s", patch_file, branch_name)
-            return True
+            return {"patch_file": patch_file, "before_sha": file_sha}
         except GithubException as exc:
             logger.warning("Failed to commit patch: %s", exc)
-            return False
+            return None
 
     def _apply_patch(self, original: str, patch_set: unidiff.PatchSet) -> str:
         """Apply a parsed unidiff PatchSet to original file content."""
@@ -197,3 +222,57 @@ class GitHubClient:
             "> Never merge without human review.",
         ]
         return "\n".join(parts) + "\n"
+
+    def check_pr_merged(self, pr_number: int) -> dict | None:
+        """Poll a PR's merge status. Returns merge metadata if merged, else None."""
+        try:
+            pr = self._repo.get_pull(pr_number)
+        except GithubException as exc:
+            logger.warning("Could not fetch PR #%s: %s", pr_number, exc)
+            return None
+        if not pr.merged:
+            return None
+        return {"merge_commit_sha": pr.merge_commit_sha, "merged_at": pr.merged_at}
+
+    def get_current_file_sha(self, patch_file: str, ref: str | None = None) -> str | None:
+        """Return the current blob sha for a file on the given ref (default branch if omitted)."""
+        try:
+            ref = ref or self._repo.default_branch
+            gh_file = self._repo.get_contents(patch_file, ref=ref)
+            return gh_file.sha
+        except GithubException as exc:
+            logger.warning("Could not fetch current sha for %s: %s", patch_file, exc)
+            return None
+
+    def revert_patch(
+        self,
+        patch_file: str,
+        before_sha: str,
+        current_sha: str,
+        incident_id: str,
+        branch: str | None = None,
+    ) -> str | None:
+        """Restore patch_file to its pre-patch content by fetching the before_sha blob
+        and committing it back on top of current_sha. Returns the new commit sha, or None."""
+        try:
+            branch = branch or self._repo.default_branch
+            blob = self._repo.get_git_blob(before_sha)
+            original_content = base64.b64decode(blob.content).decode("utf-8")
+        except GithubException as exc:
+            logger.warning("Could not fetch before_sha blob %s: %s", before_sha, exc)
+            return None
+
+        try:
+            result = self._repo.update_file(
+                path=patch_file,
+                message=f"[SentinAI] rollback for incident {incident_id[:8]}",
+                content=original_content,
+                sha=current_sha,
+                branch=branch,
+            )
+            new_sha = result["commit"].sha
+            logger.info("Reverted %s on %s (commit %s)", patch_file, branch, new_sha)
+            return new_sha
+        except GithubException as exc:
+            logger.warning("Failed to revert %s: %s", patch_file, exc)
+            return None

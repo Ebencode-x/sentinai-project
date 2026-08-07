@@ -51,6 +51,23 @@ class RemediationSuggestion(BaseModel):
         default=None,
         description="GitHub PR URL opened by SentinAI for this suggestion.",
     )
+    pr_number: int | None = Field(
+        default=None,
+        description="GitHub PR number opened by SentinAI for this suggestion.",
+    )
+    patch_file: str | None = Field(
+        default=None,
+        description="File path targeted by the committed patch, derived from the diff.",
+    )
+    before_sha: str | None = Field(
+        default=None,
+        description="Blob sha of patch_file immediately before the patch was committed. "
+        "Used internally to build rollback ledger entries.",
+    )
+    branch_name: str | None = Field(
+        default=None,
+        description="Branch SentinAI committed the patch to. Used internally for rollback.",
+    )
     patch_file: str | None = Field(
         default=None,
         description="Repo-relative path of the file patched in the auto-patch PR.",

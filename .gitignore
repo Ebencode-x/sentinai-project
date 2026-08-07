@@ -42,3 +42,8 @@ logs/settings.json
 logs/incidents.json
 sentinai.db
 *.db
+*.bak
+apply_rollback_foundation.py
+apply_test_fixes.py
+fix_auth_consolidation.py
+fix_security_deprecation.py

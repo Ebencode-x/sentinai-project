@@ -38,6 +38,7 @@ class AppState:
     _scan_lock: threading.Lock = field(default_factory=threading.Lock)
     autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
     notification_channels: list[dict] = field(default_factory=list)
+    rollback_ledger: list[dict] = field(default_factory=list)
     total_scan_runs: int = 0
     last_scan_at_utc: datetime | None = None
     last_scan_new_incidents: int = 0
@@ -63,6 +64,16 @@ class AppState:
                 incident, autonomy_mode=self.autonomy_mode
             )
             self.recent_suggestions.append(suggestion)
+
+            if suggestion.pr_number and suggestion.patch_file and suggestion.before_sha:
+                self.add_rollback_ledger_entry(
+                    incident_id=incident.incident_id,
+                    pr_number=suggestion.pr_number,
+                    pr_url=suggestion.pr_url,
+                    branch_name=suggestion.branch_name,
+                    patch_file=suggestion.patch_file,
+                    before_sha=suggestion.before_sha,
+                )
 
             # Milestone 3: fire Slack + webhook notifications
             notify(incident, suggestion, channels=self.notification_channels)
@@ -180,6 +191,65 @@ class AppState:
                 logger.info("[state] Loaded %d notification channel(s) from cache", len(channels))
         except Exception as e:
             logger.warning("[state] Failed to load settings: %s", e)
+
+    def _rollback_ledger_cache_path(self):
+        import pathlib
+
+        p = pathlib.Path(self.watcher.config.log_file_path).parent / "rollback_ledger.json"
+        return p
+
+    def _save_rollback_ledger(self):
+        import json
+
+        try:
+            self._rollback_ledger_cache_path().write_text(
+                json.dumps(self.rollback_ledger, default=str)
+            )
+        except Exception as e:
+            logger.warning("[state] Failed to save rollback ledger: %s", e)
+
+    def load_rollback_ledger(self):
+        import json
+
+        p = self._rollback_ledger_cache_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text())
+            if isinstance(data, list):
+                self.rollback_ledger = data
+                logger.info("[state] Loaded %d rollback ledger entr(y/ies) from cache", len(data))
+        except Exception as e:
+            logger.warning("[state] Failed to load rollback ledger: %s", e)
+
+    def add_rollback_ledger_entry(
+        self,
+        incident_id: str,
+        pr_number: int,
+        pr_url: str | None,
+        branch_name: str | None,
+        patch_file: str,
+        before_sha: str,
+    ) -> dict:
+        import uuid
+        from datetime import UTC, datetime
+
+        entry = {
+            "id": str(uuid.uuid4()),
+            "incident_id": incident_id,
+            "pr_number": pr_number,
+            "pr_url": pr_url,
+            "branch_name": branch_name,
+            "patch_file": patch_file,
+            "before_sha": before_sha,
+            "after_sha": None,
+            "merge_commit_sha": None,
+            "status": "proposed",  # proposed -> applied -> rollback_proposed -> rolled_back
+            "opened_at": datetime.now(UTC).isoformat(),
+        }
+        self.rollback_ledger.append(entry)
+        self._save_rollback_ledger()
+        return entry
 
     def set_autonomy_mode(self, mode: str) -> None:
         if mode not in ("propose_only", "auto_pr"):
