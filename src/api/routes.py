@@ -193,3 +193,24 @@ def remove_channel(channel_id: str) -> dict:
     if not deleted:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return {"deleted": True, "id": channel_id}
+
+
+@router.get("/rollbacks", dependencies=_PROTECTED, tags=["rollbacks"])
+def list_rollbacks() -> list[dict]:
+    return app_state.rollback_ledger
+
+
+@router.post("/rollbacks/{ledger_id}/propose", dependencies=_ADMIN_ONLY, tags=["rollbacks"])
+def propose_rollback(ledger_id: str) -> dict:
+    try:
+        return app_state.propose_rollback(ledger_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/rollbacks/{ledger_id}/confirm", dependencies=_ADMIN_ONLY, tags=["rollbacks"])
+def confirm_rollback(ledger_id: str) -> dict:
+    try:
+        return app_state.confirm_rollback(ledger_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -24,6 +24,10 @@ class RemediationEngine:
         self._stub = StubLLMClient()
         self._github = GitHubClient() if settings.github_token and settings.github_repo else None
 
+    @property
+    def github_client(self) -> GitHubClient | None:
+        return self._github
+
     def suggest_fix(
         self, incident: LogIncident, autonomy_mode: str = "propose_only"
     ) -> RemediationSuggestion:

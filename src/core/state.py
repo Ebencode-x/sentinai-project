@@ -251,6 +251,85 @@ class AppState:
         self._save_rollback_ledger()
         return entry
 
+    def get_rollback_ledger_entry(self, ledger_id: str) -> dict | None:
+        for entry in self.rollback_ledger:
+            if entry["id"] == ledger_id:
+                return entry
+        return None
+
+    def propose_rollback(self, ledger_id: str) -> dict:
+        entry = self.get_rollback_ledger_entry(ledger_id)
+        if entry is None:
+            raise ValueError("Ledger entry not found.")
+        github = self.remediation_engine.github_client
+        if github is None:
+            raise ValueError("GitHub integration not configured.")
+
+        if entry.get("merge_commit_sha") is None:
+            merge_info = github.check_pr_merged(entry["pr_number"])
+            if merge_info is None:
+                raise ValueError("PR has not been merged yet — nothing to roll back.")
+            entry["merge_commit_sha"] = merge_info["merge_commit_sha"]
+            after_sha = github.get_current_file_sha(entry["patch_file"], ref=entry["branch_name"])
+            entry["after_sha"] = after_sha
+            entry["status"] = "applied"
+
+        current_sha = github.get_current_file_sha(entry["patch_file"])
+        if current_sha is None:
+            raise ValueError(f"Could not read current state of {entry['patch_file']}.")
+
+        if current_sha != entry["after_sha"]:
+            entry["status"] = "rollback_blocked"
+            self._save_rollback_ledger()
+            return {
+                "conflict": True,
+                "ledger_id": ledger_id,
+                "patch_file": entry["patch_file"],
+                "after_sha": entry["after_sha"],
+                "current_sha": current_sha,
+                "message": (
+                    f"{entry['patch_file']} has changed since this patch was applied "
+                    "(another patch or a manual commit). Auto-revert blocked."
+                ),
+            }
+
+        entry["status"] = "rollback_proposed"
+        entry["rollback_current_sha"] = current_sha
+        self._save_rollback_ledger()
+        return {
+            "conflict": False,
+            "ledger_id": ledger_id,
+            "patch_file": entry["patch_file"],
+            "message": "Clean revert available. Call confirm to execute.",
+        }
+
+    def confirm_rollback(self, ledger_id: str) -> dict:
+        entry = self.get_rollback_ledger_entry(ledger_id)
+        if entry is None:
+            raise ValueError("Ledger entry not found.")
+        if entry.get("status") != "rollback_proposed":
+            raise ValueError(
+                f"Ledger entry status is '{entry.get('status')}', expected 'rollback_proposed'. "
+                "Call propose first."
+            )
+        github = self.remediation_engine.github_client
+        if github is None:
+            raise ValueError("GitHub integration not configured.")
+
+        new_sha = github.revert_patch(
+            patch_file=entry["patch_file"],
+            before_sha=entry["before_sha"],
+            current_sha=entry["rollback_current_sha"],
+            incident_id=entry["incident_id"],
+        )
+        if new_sha is None:
+            raise ValueError("Revert commit failed. Check server logs.")
+
+        entry["status"] = "rolled_back"
+        entry["revert_commit_sha"] = new_sha
+        self._save_rollback_ledger()
+        return {"ledger_id": ledger_id, "status": "rolled_back", "revert_commit_sha": new_sha}
+
     def set_autonomy_mode(self, mode: str) -> None:
         if mode not in ("propose_only", "auto_pr"):
             raise ValueError(f"Invalid autonomy_mode: {mode}")
