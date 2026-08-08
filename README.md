@@ -204,6 +204,8 @@ sentinai-project/
 
 ---
 
+---
 ## License
-
 MIT — free to use, modify, and distribute.
+
+<!-- rollback smoke test marker: safe to remove -->
