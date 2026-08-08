@@ -80,7 +80,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["X-API-Key", "X-Session-Token", "Content-Type", "Accept"],
     max_age=600,  # preflight cache: 10 minutes
 )
