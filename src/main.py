@@ -18,6 +18,7 @@ from src.api.chat import router as chat_router
 from src.api.routes import router
 from src.core.config import settings
 from src.core.state import app_state
+from src.db.startup import prepare_database
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
@@ -46,6 +47,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create/upgrade the auth tables and make sure a first admin exists, so that a
+    # fresh clone (or a fresh database) can log in without any manual steps.
+    prepare_database()
     # Start from end to avoid replaying stale logs during demos.
     app_state.watcher.initialize_position(start_from_end=True)
     app_state.load_incidents()

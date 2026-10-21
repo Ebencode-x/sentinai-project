@@ -29,10 +29,12 @@ WORKDIR /app
 COPY --from=builder /build/deps ./deps
 COPY src ./src
 COPY sentinai ./sentinai
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
-RUN mkdir -p logs && chown -R sentinai:sentinai /app
+RUN mkdir -p logs data && chown -R sentinai:sentinai /app
 USER sentinai
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:7860/health', timeout=5).raise_for_status()"
+    CMD python -c "import httpx; httpx.get('http://localhost:7860/health/live', timeout=5).raise_for_status()"
 CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]

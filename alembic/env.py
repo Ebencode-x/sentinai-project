@@ -14,7 +14,9 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+# Skipped when run in-process from the app (see src/db/migrate.py), so that
+# alembic does not replace the application's own logging configuration.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
@@ -24,7 +26,9 @@ if config.config_file_name is not None:
 from src.core.config import settings  # noqa: E402
 from src.db.models import Base  # noqa: E402
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option(
+    "sqlalchemy.url", config.attributes.get("database_url") or settings.database_url
+)
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

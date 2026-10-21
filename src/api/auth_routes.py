@@ -48,7 +48,8 @@ def login(body: LoginRequest, db: DBSession = Depends(get_db)) -> LoginResponse:
         )
 
     now = datetime.now(UTC)
-    session = SessionModel(user_id=user.id, expires_at=now + _SESSION_LIFETIME)
+    expires_at = now + _SESSION_LIFETIME
+    session = SessionModel(user_id=user.id, expires_at=expires_at)
     db.add(session)
     user.last_login_at = now
     db.commit()
@@ -57,7 +58,7 @@ def login(body: LoginRequest, db: DBSession = Depends(get_db)) -> LoginResponse:
         token=session.token,
         email=user.email,
         role=user.role,
-        expires_at=session.expires_at.isoformat(),
+        expires_at=expires_at.isoformat(),  # always carries +00:00, on any database
     )
 
 

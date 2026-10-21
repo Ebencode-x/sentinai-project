@@ -44,6 +44,9 @@ jobs:
             --cov-report=xml \
             --cov-fail-under=75
 
+      - name: Fresh-start smoke test (empty database, first-run login, restart)
+        run: sh scripts/smoke_fresh_start.sh python
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

@@ -79,4 +79,8 @@ class Session(Base):
 
     @property
     def is_expired(self) -> bool:
-        return datetime.now(UTC) >= self.expires_at
+        expires = self.expires_at
+        if expires.tzinfo is None:
+            # SQLite does not store time zones and returns naive values; they are UTC.
+            expires = expires.replace(tzinfo=UTC)
+        return datetime.now(UTC) >= expires
