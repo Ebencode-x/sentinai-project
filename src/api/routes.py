@@ -30,7 +30,11 @@ _ADMIN_ONLY = [Depends(require_admin)]
 # ---------------------------------------------------------------------------
 
 
-@router.get("/health/live", tags=["observability"])
+@router.api_route(
+    "/health/live",
+    methods=["GET", "HEAD"],
+    tags=["observability"],
+)
 def health_live() -> dict:
     """Liveness probe — public, no auth required."""
     return run_liveness()
@@ -43,7 +47,11 @@ def health_live() -> dict:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/health/ready", tags=["observability"])
+@router.api_route(
+    "/health/ready",
+    methods=["GET", "HEAD"],
+    tags=["observability"],
+)
 def health_ready(response: Response) -> dict:
     """Readiness probe — public, no auth required.
 
