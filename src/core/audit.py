@@ -32,6 +32,7 @@ import hashlib
 import json
 import logging
 import threading
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -104,9 +105,10 @@ class AuditLogger:
     def tail(self, n: int = 50) -> list[dict]:
         """Return the last n audit entries (most recent last)."""
         try:
-            lines = self._path.read_text(encoding="utf-8").splitlines()
+            with self._path.open("r", encoding="utf-8") as fh:
+                lines = list(deque(fh, maxlen=n))
             entries = []
-            for line in lines[-n:]:
+            for line in lines:
                 line = line.strip()
                 if line:
                     try:
