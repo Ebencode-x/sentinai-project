@@ -55,8 +55,7 @@ export default function ChatPanel() {
     abortRef.current = controller;
 
     try {
-      const BASE = import.meta.env.VITE_API_URL ?? "/api";
-      const url = BASE === "/api" ? "/api/chat" : BASE + "/chat";
+      const url = `${import.meta.env.VITE_API_URL ?? ""}/api/chat`;
       const token = getStoredToken();
       const res = await fetch(url, {
         method: "POST",
