@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Copy, Play, RotateCcw } from "lucide-react";
+import { Card, CardHeader } from "@/components/Card";
+import { useToast } from "@/components/Toast";
 
-const EXAMPLE_POLICY = `# SentinAI Policy Configuration
-# Edit and validate your security rules here.
+const SAMPLE_POLICY = `# Sample policy
+# Edit the rules below and run a quick check.
 
 version: "1.0"
 
@@ -32,97 +35,160 @@ thresholds:
   notify_on: [critical, high]
 `.trim();
 
-export default function PolicyEditor() {
-  const [content, setContent] = useState(EXAMPLE_POLICY);
-  const [status, setStatus] = useState<"idle" | "ok" | "error">("idle");
-  const [message, setMessage] = useState("");
+type Issue = { level: "error" | "warning"; text: string };
 
-  function validate() {
-    // Client-side YAML structure validation
+const SEVERITIES = new Set(["critical", "high", "medium", "low"]);
+const unquote = (v: string) => v.replace(/^["']|["']$/g, "");
+
+function checkPolicy(src: string): Issue[] {
+  if (!src.trim()) return [{ level: "error", text: "The policy is empty." }];
+
+  const issues: Issue[] = [];
+  const error = (text: string) => issues.push({ level: "error", text });
+  const warn = (text: string) => issues.push({ level: "warning", text });
+
+  if (/\t/.test(src)) error("YAML does not allow tab characters for indentation.");
+  if (!/^version:\s*\S+/m.test(src)) error("Missing a top-level version field.");
+
+  const hasRules = /^rules:\s*$/m.test(src);
+  if (!hasRules) error("Missing a top-level rules: list.");
+
+  const ids = Array.from(src.matchAll(/^\s*-\s*id:\s*(\S+)/gm), (m) => unquote(m[1]));
+  if (hasRules && ids.length === 0) error("The rules list has no entries.");
+
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  ids.forEach((id) => {
+    if (seen.has(id)) dupes.add(id);
+    seen.add(id);
+  });
+  dupes.forEach((id) => error(`Rule id "${id}" appears more than once.`));
+
+  for (const m of src.matchAll(/^\s*severity:\s*(\S+)/gm)) {
+    if (!SEVERITIES.has(unquote(m[1]).toLowerCase())) {
+      error(`Unknown severity "${unquote(m[1])}". Use critical, high, medium or low.`);
+    }
+  }
+  const severityCount = (src.match(/^\s*severity:/gm) ?? []).length;
+  if (ids.length > 0 && severityCount < ids.length) warn("Some rules have no severity.");
+
+  const conf = src.match(/^\s*min_confidence:\s*(\S+)/m);
+  if (conf) {
+    const v = Number(conf[1]);
+    if (!Number.isFinite(v) || v < 0 || v > 1) error("min_confidence must be a number between 0 and 1.");
+  }
+
+  return issues;
+}
+
+const BTN_GHOST =
+  "inline-flex items-center gap-2 rounded-md px-3 h-8 text-sm font-medium transition-colors " +
+  "border border-[var(--border-strong)] text-[var(--text-secondary)] " +
+  "hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]";
+
+export default function PolicyEditor() {
+  const { toast } = useToast();
+  const [content, setContent] = useState(SAMPLE_POLICY);
+  const [issues, setIssues] = useState<Issue[] | null>(null);
+
+  const lineCount = useMemo(() => content.split("\n").length, [content]);
+  const hasError = issues?.some((i) => i.level === "error") ?? false;
+
+  async function copy() {
     try {
-      const lines = content.split("\n");
-      const hasVersion = lines.some((l) => l.trim().startsWith("version:"));
-      const hasRules   = lines.some((l) => l.trim().startsWith("rules:"));
-      if (!hasVersion || !hasRules) throw new Error("Missing required fields: version, rules");
-      setStatus("ok");
-      setMessage("Policy structure valid — ready to apply");
-    } catch (e) {
-      setStatus("error");
-      setMessage(e instanceof Error ? e.message : "Validation failed");
+      await navigator.clipboard.writeText(content);
+      toast("Copied to clipboard", "ok");
+    } catch {
+      toast("Could not copy", "error");
     }
   }
 
-  const lineCount = content.split("\n").length;
+  function reset() {
+    if (content !== SAMPLE_POLICY && !window.confirm("Replace your edits with the sample policy?")) return;
+    setContent(SAMPLE_POLICY);
+    setIssues(null);
+  }
 
   return (
-    <div className="space-y-6 animate-slide-up">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-sm font-display tracking-widest text-text">POLICY EDITOR</h1>
-          <p className="text-xs text-muted mt-1 tracking-wide">
-            Edit sentinai-policy.yml — validate before applying
+          <h1 className="text-xl font-semibold tracking-tight">Policy</h1>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            A scratchpad for policy drafts. Changes stay in this browser tab and are not saved to the server.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <button className={BTN_GHOST} onClick={reset}>
+            <RotateCcw size={14} />
+            Reset
+          </button>
+          <button className={BTN_GHOST} onClick={copy}>
+            <Copy size={14} />
+            Copy
+          </button>
           <button
-            onClick={validate}
-            className="text-xs tracking-widest px-4 py-2 border border-accent text-accent
-                       hover:bg-accent hover:text-bg rounded-sm transition-all hover:shadow-glow-accent"
+            onClick={() => setIssues(checkPolicy(content))}
+            className="inline-flex items-center gap-2 rounded-md px-3.5 h-8 text-sm font-medium"
+            style={{ background: "var(--brand)", color: "#1a1a1a" }}
           >
-            ◈ VALIDATE
+            <Play size={14} />
+            Run check
           </button>
         </div>
       </div>
 
-      {/* Status bar */}
-      {status !== "idle" && (
-        <div className={`text-xs px-4 py-2 border rounded-sm tracking-wide
-          ${status === "ok"
-            ? "border-ok/30 bg-ok/5 text-ok"
-            : "border-warn/40 bg-warn/5 text-warn"}`}>
-          {status === "ok" ? "✓" : "▲"} {message}
-        </div>
-      )}
+      {issues &&
+        (issues.length === 0 ? (
+          <p className="rounded-md px-3 py-2 text-sm" style={{ background: "var(--green-dim)", color: "var(--green)" }}>
+            Structure looks fine. This is a quick check, not a full YAML parse.
+          </p>
+        ) : (
+          <ul
+            className="rounded-md px-3 py-2 text-sm flex flex-col gap-1"
+            style={{ background: hasError ? "var(--red-dim)" : "var(--amber-dim)" }}
+          >
+            {issues.map((i, n) => (
+              <li key={n} style={{ color: i.level === "error" ? "var(--red)" : "var(--amber)" }}>
+                {i.text}
+              </li>
+            ))}
+          </ul>
+        ))}
 
-      {/* Editor area */}
-      <div className="border border-bg-border rounded-sm overflow-hidden">
-        {/* Editor toolbar */}
-        <div className="flex items-center justify-between px-4 py-2
-                        bg-bg-card border-b border-bg-border">
-          <span className="text-[10px] text-muted tracking-widest">
-            YAML · sentinai-policy.yml
-          </span>
-          <div className="flex gap-4 text-[10px] text-muted">
-            <span>{lineCount} lines</span>
-            <span>{content.length} chars</span>
-          </div>
-        </div>
-
-        {/* Line numbers + textarea */}
-        <div className="flex font-mono text-xs">
-          {/* Line numbers */}
-          <div className="select-none bg-bg px-3 py-4 text-right text-muted/40
-                          border-r border-bg-border min-w-[3rem] leading-6">
+      <Card>
+        <CardHeader
+          title="sentinai-policy.yml"
+          action={
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {lineCount} lines
+            </span>
+          }
+        />
+        <div className="flex font-mono text-xs overflow-auto max-h-[70vh]" style={{ background: "var(--bg-base)" }}>
+          <div
+            className="select-none text-right px-3 py-3 shrink-0"
+            style={{ color: "var(--text-muted)", borderRight: "1px solid var(--border)", lineHeight: "24px" }}
+            aria-hidden="true"
+          >
             {Array.from({ length: lineCount }, (_, i) => (
               <div key={i}>{i + 1}</div>
             ))}
           </div>
-
-          {/* Textarea */}
           <textarea
             value={content}
-            onChange={(e) => { setContent(e.target.value); setStatus("idle"); }}
+            onChange={(e) => {
+              setContent(e.target.value);
+              setIssues(null);
+            }}
             spellCheck={false}
-            className="flex-1 bg-bg text-text px-4 py-4 outline-none resize-none
-                       leading-6 min-h-[420px] font-mono text-xs"
+            wrap="off"
+            aria-label="Policy YAML"
+            className="flex-1 min-w-0 px-4 py-3 outline-none resize-none bg-transparent whitespace-pre overflow-x-auto"
+            style={{ color: "var(--text-primary)", lineHeight: "24px" }}
           />
         </div>
-      </div>
-
-      <p className="text-[10px] text-muted/50 tracking-wider">
-        // Changes are local only — apply via CLI: <span className="text-accent">sentinai apply-policy</span>
-      </p>
+      </Card>
     </div>
   );
 }
