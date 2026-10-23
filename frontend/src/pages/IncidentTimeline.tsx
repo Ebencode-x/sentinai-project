@@ -1,37 +1,50 @@
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Incident } from "@/api/client";
 import { format, parseISO } from "date-fns";
-import SeverityBadge from "@/components/SeverityBadge";
-import Skeleton from "@/components/Skeleton";
-import EmptyState from "@/components/EmptyState";
-import ErrorBanner from "@/components/ErrorBanner";
+import { ChevronRight, RefreshCw } from "lucide-react";
+import { api } from "@/api/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/Toast";
-import { RefreshCw, Radio, Clock, Hash } from "lucide-react";
+import { Card } from "@/components/Card";
+import StatCard from "@/components/StatCard";
+import SeverityBadge from "@/components/SeverityBadge";
 
 const SEV_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-const SEV_GLOW: Record<string, string> = {
-  critical: "var(--red)",
-  high:     "var(--amber)",
-  medium:   "var(--amber)",
-  low:      "var(--green)",
-};
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "open", label: "Open" },
+  { key: "resolved", label: "Resolved" },
+  { key: "critical", label: "Critical" },
+  { key: "high", label: "High" },
+  { key: "medium", label: "Medium" },
+  { key: "low", label: "Low" },
+];
+
+function fmt(ts: string): string {
+  try {
+    return format(parseISO(ts), "MMM d, HH:mm:ss");
+  } catch {
+    return ts;
+  }
+}
 
 export default function IncidentTimeline() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [filter, setFilter] = useState("all");
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const { data: incidents = [], isLoading, error } = useQuery({
+  const { data: incidents = [], isLoading, isError } = useQuery({
     queryKey: ["incidents"],
-    queryFn:  () => api.incidents().then((r) => r.data),
+    queryFn: () => api.incidents().then((r) => r.data),
     refetchInterval: 15_000,
   });
 
   const { data: stats } = useQuery({
     queryKey: ["stats"],
-    queryFn:  () => api.stats().then((r) => r.data),
+    queryFn: () => api.stats().then((r) => r.data),
     refetchInterval: 30_000,
   });
 
@@ -39,210 +52,173 @@ export default function IncidentTimeline() {
     mutationFn: () => api.scanNow().then((r) => r.data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["incidents"] });
-      toast(`scan complete — ${data.detected_incidents} new`, data.detected_incidents > 0 ? "warn" : "ok");
+      toast(
+        data.detected_incidents > 0
+          ? `Scan complete, ${data.detected_incidents} new`
+          : "Scan complete, nothing new found",
+        data.detected_incidents > 0 ? "warn" : "ok"
+      );
     },
-    onError: () => toast("scan failed", "error"),
+    onError: () => toast("Scan failed", "error"),
   });
 
-  const sorted = [...incidents].sort(
-    (a, b) =>
-      (SEV_ORDER[a.severity] ?? 4) - (SEV_ORDER[b.severity] ?? 4) ||
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-
-  const filtered = filter === "all"
-    ? sorted
-    : sorted.filter((i) => i.severity === filter || i.status === filter);
+  const rows = useMemo(() => {
+    const sorted = [...incidents].sort(
+      (a, b) =>
+        (SEV_ORDER[a.severity] ?? 4) - (SEV_ORDER[b.severity] ?? 4) ||
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    return filter === "all" ? sorted : sorted.filter((i) => i.severity === filter || i.status === filter);
+  }, [incidents, filter]);
 
   const critCount = incidents.filter((i) => i.severity === "critical").length;
-  const openCount = incidents.filter((i) => i.status  === "open").length;
-
-  const FILTERS = ["all","critical","high","medium","low","open","resolved"];
+  const openCount = incidents.filter((i) => i.status === "open").length;
+  const avg = stats?.llm_metrics?.avg_latency_ms ?? stats?.avg_latency_ms ?? null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px",
-      animation: "slideUp 0.3s ease-out both" }}>
-
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "13px", fontWeight: 700,
-            letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-primary)" }}>
-            Incident Timeline
-          </h1>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            color: "var(--text-muted)", marginTop: "4px", letterSpacing: "0.04em" }}>
-            live · auto-refresh 15s
+          <h1 className="text-xl font-semibold tracking-tight">Incidents</h1>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            Detected from your logs, refreshed every 15 seconds
           </p>
         </div>
-        <button
-          onClick={() => scanMut.mutate()}
-          disabled={scanMut.isPending}
-          style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            letterSpacing: "0.1em", padding: "8px 16px",
-            border: scanMut.isPending ? "0.5px solid var(--border)" : "0.5px solid var(--cyan)",
-            borderRadius: "6px",
-            background: scanMut.isPending ? "var(--bg-elevated)" : "var(--cyan-dim)",
-            color: scanMut.isPending ? "var(--text-muted)" : "var(--cyan)",
-            cursor: scanMut.isPending ? "wait" : "pointer", transition: "all 0.15s",
-          }}>
-          <RefreshCw size={11} strokeWidth={2}
-            style={{ animation: scanMut.isPending ? "spin 1s linear infinite" : "none" }} />
-          {scanMut.isPending ? "scanning" : "scan now"}
-        </button>
-      </div>
-
-      {/* Stat strip */}
-      {!isLoading && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
-          {[
-            { label: "total",    value: incidents.length,           accent: false },
-            { label: "open",     value: openCount,                  accent: openCount > 0 },
-            { label: "critical", value: critCount,                  accent: critCount > 0 },
-            { label: "avg lat",  value: stats?.avg_latency_ms != null
-                ? `${Math.round(stats.avg_latency_ms)}ms` : "—",   accent: false },
-          ].map(({ label, value, accent }) => (
-            <div key={label} style={{
-              border: `0.5px solid ${accent ? "var(--red)" : "var(--border)"}`,
-              borderRadius: "6px", padding: "10px 14px",
-              background: accent ? "var(--red-dim)" : "var(--bg-surface)",
-            }}>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                letterSpacing: "0.12em", textTransform: "uppercase",
-                color: accent ? "var(--red)" : "var(--text-muted)" }}>{label}</div>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: "20px", fontWeight: 700,
-                color: accent ? "var(--red)" : "var(--text-primary)", marginTop: "4px",
-                lineHeight: 1 }}>{value}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Filter bar */}
-      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-        {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)} style={{
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-            letterSpacing: "0.1em", textTransform: "uppercase",
-            padding: "5px 10px", borderRadius: "4px", cursor: "pointer", transition: "all 0.12s",
-            border: filter === f ? "0.5px solid var(--cyan)" : "0.5px solid var(--border)",
-            background: filter === f ? "var(--cyan-dim)" : "transparent",
-            color: filter === f ? "var(--cyan)" : "var(--text-muted)",
-          }}>{f}</button>
-        ))}
-        <span style={{ marginLeft: "auto", fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: "10px", color: "var(--text-muted)" }}>
-          {filtered.length}/{incidents.length}
-        </span>
-      </div>
-
-      {error && <ErrorBanner message="Failed to load incidents." />}
-
-      {isLoading ? (
-        <Skeleton rows={5} />
-      ) : filtered.length === 0 ? (
-        <EmptyState message="no incidents match filter" />
-      ) : (
-        <div style={{ position: "relative" }}>
-          {/* Timeline spine */}
-          <div style={{ position: "absolute", left: "7px", top: 0, bottom: 0,
-            width: "1px", background: "var(--border)" }} />
-          <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-            {filtered.map((inc, i) => (
-              <IncidentRow key={inc.id} incident={inc} index={i} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function IncidentRow({ incident, index }: { incident: Incident; index: number }) {
-  const [open, setOpen] = useState(false);
-
-  const dotColor = SEV_GLOW[incident.severity] ?? "var(--text-muted)";
-
-  const ts = (() => {
-    try { return format(parseISO(incident.timestamp), "MMM dd HH:mm:ss"); }
-    catch { return incident.timestamp; }
-  })();
-
-  return (
-    <div style={{ position: "relative", paddingLeft: "24px", paddingBottom: "8px",
-      animationDelay: `${index * 35}ms` }}>
-      {/* Timeline dot */}
-      <div style={{ position: "absolute", left: "0", top: "10px",
-        width: "14px", height: "14px", borderRadius: "50%",
-        background: dotColor,
-        boxShadow: open ? `0 0 10px ${dotColor}` : "none",
-        border: "2px solid var(--bg-base)",
-        transition: "box-shadow 0.2s",
-      }} />
-
-      <div
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          border: `0.5px solid ${open ? "var(--border-strong)" : "var(--border)"}`,
-          borderRadius: "6px", padding: "10px 14px", cursor: "pointer",
-          background: open ? "var(--bg-elevated)" : "var(--bg-surface)",
-          transition: "all 0.15s",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-strong)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "var(--border-strong)" : "var(--border)"; }}
-      >
-        {/* Row header */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <SeverityBadge level={incident.severity} />
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
-            <Clock size={10} strokeWidth={1.75} />
-            {ts}
-          </span>
-          {incident.status === "resolved" && (
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-              letterSpacing: "0.1em", border: "0.5px solid var(--green)",
-              color: "var(--green)", padding: "2px 6px", borderRadius: "3px" }}>
-              resolved
-            </span>
-          )}
-          <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "11px" }}>
-            {open ? "▲" : "▼"}
-          </span>
-        </div>
-
-        {/* Title */}
-        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "13px",
-          color: "var(--text-primary)", marginTop: "6px", lineHeight: 1.5 }}>
-          {incident.title}
-        </p>
-
-        {/* Expanded */}
-        {open && (
-          <div style={{ marginTop: "10px", paddingTop: "10px",
-            borderTop: "0.5px solid var(--border)", display: "flex",
-            flexDirection: "column", gap: "8px", animation: "fadeIn 0.2s ease-out both" }}>
-            <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
-              color: "var(--text-secondary)", lineHeight: 1.6 }}>
-              {incident.description}
-            </p>
-            <div style={{ display: "flex", gap: "16px" }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
-                <Hash size={9} />id: {incident.id}
-              </span>
-              {incident.source && (
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                  color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Radio size={9} />source: {incident.source}
-                </span>
-              )}
-            </div>
-          </div>
+        {user?.role === "admin" && (
+          <button
+            onClick={() => scanMut.mutate()}
+            disabled={scanMut.isPending}
+            className="inline-flex items-center gap-2 rounded-md px-3.5 h-9 text-sm font-medium transition-opacity disabled:opacity-60"
+            style={{ background: "var(--brand)", color: "#1a1a1a" }}
+          >
+            <RefreshCw size={14} className={scanMut.isPending ? "animate-spin" : ""} />
+            {scanMut.isPending ? "Scanning" : "Scan now"}
+          </button>
         )}
       </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total" value={incidents.length} />
+        <StatCard label="Open" value={openCount} />
+        <StatCard label="Critical" value={critCount} accent={critCount > 0} color="red" />
+        <StatCard label="Avg LLM latency" value={avg != null ? `${Math.round(avg)} ms` : "n/a"} />
+      </div>
+
+      <Card>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="flex flex-wrap gap-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                style={{
+                  background: filter === f.key ? "var(--bg-hover)" : "transparent",
+                  color: filter === f.key ? "var(--text-primary)" : "var(--text-secondary)",
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <span className="ml-auto text-xs" style={{ color: "var(--text-muted)" }}>
+            {rows.length} of {incidents.length} incidents
+          </span>
+        </div>
+
+        {isLoading ? (
+          <div className="p-4 flex flex-col gap-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-10 rounded-md animate-pulse" style={{ background: "var(--bg-panel)" }} />
+            ))}
+          </div>
+        ) : isError ? (
+          <p className="p-8 text-sm text-center" style={{ color: "var(--red)" }}>
+            Could not load incidents.
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="p-8 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+            {incidents.length === 0 ? "No incidents detected." : "No incidents match this filter."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[620px]">
+              <thead>
+                <tr style={{ color: "var(--text-muted)" }}>
+                  <th className="w-8" />
+                  <th className="text-left font-medium text-xs px-2 py-2">Title</th>
+                  <th className="text-left font-medium text-xs px-2 py-2 w-28">Severity</th>
+                  <th className="text-left font-medium text-xs px-2 py-2 w-28">Status</th>
+                  <th className="text-right font-medium text-xs px-4 py-2 w-40">Detected</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((inc) => {
+                  const open = openId === inc.id;
+                  return (
+                    <Fragment key={inc.id}>
+                      <tr
+                        onClick={() => setOpenId(open ? null : inc.id)}
+                        className="cursor-pointer transition-colors hover:bg-[var(--bg-panel)]"
+                        style={{ borderTop: "1px solid var(--border)", background: open ? "var(--bg-panel)" : undefined }}
+                      >
+                        <td className="pl-3">
+                          <ChevronRight
+                            size={14}
+                            className="transition-transform"
+                            style={{ color: "var(--text-muted)", transform: open ? "rotate(90deg)" : undefined }}
+                          />
+                        </td>
+                        <td className="px-2 py-3 max-w-0">
+                          <p className="truncate font-medium">{inc.title}</p>
+                          {inc.source && (
+                            <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>{inc.source}</p>
+                          )}
+                        </td>
+                        <td className="px-2 py-3"><SeverityBadge level={inc.severity} /></td>
+                        <td className="px-2 py-3">
+                          <span className="inline-flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ background: inc.status === "open" ? "var(--amber)" : "var(--green)" }}
+                            />
+                            {inc.status === "open" ? "Open" : "Resolved"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs" style={{ color: "var(--text-muted)" }}>
+                          {fmt(inc.timestamp)}
+                        </td>
+                      </tr>
+                      {open && (
+                        <tr style={{ background: "var(--bg-base)" }}>
+                          <td colSpan={5} className="px-4 py-4">
+                            <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Details</p>
+                            <pre
+                              className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words"
+                              style={{
+                                background: "var(--bg-panel)",
+                                border: "1px solid var(--border)",
+                                color: "var(--text-secondary)",
+                                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                              }}
+                            >
+                              {inc.description}
+                            </pre>
+                            <p className="text-xs mt-3 break-all" style={{ color: "var(--text-muted)" }}>
+                              ID: {inc.id}
+                              {inc.source ? `  ·  Source: ${inc.source}` : ""}
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
