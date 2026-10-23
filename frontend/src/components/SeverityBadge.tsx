@@ -1,6 +1,6 @@
 const SEV: Record<string, { color: string; bg: string; label: string }> = {
   critical: { color: "var(--red)",    bg: "var(--red-dim)",    label: "Critical" },
-  high:     { color: "var(--red)",    bg: "var(--red-dim)",    label: "High" },
+  high:     { color: "var(--brand)",  bg: "var(--brand-dim)",  label: "High" },
   medium:   { color: "var(--amber)",  bg: "var(--amber-dim)",  label: "Medium" },
   low:      { color: "var(--green)",  bg: "var(--green-dim)",  label: "Low" },
 };
