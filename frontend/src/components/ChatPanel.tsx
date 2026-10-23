@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MessageSquare, Send, X } from "lucide-react";
 import { getStoredToken } from "@/hooks/useAuth";
 
 interface Message {
@@ -7,39 +8,51 @@ interface Message {
   streaming?: boolean;
 }
 
+const GREETING: Message = {
+  role: "assistant",
+  content: "SentinAI Assistant online. Ask me about incidents, policy violations, or remediation steps.",
+};
+
 export default function ChatPanel() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "SentinAI Assistant online. Ask me about incidents, policy violations, or remediation steps.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([GREETING]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 100);
-  }, [open]);
+    if (open && !loading) inputRef.current?.focus();
+  }, [open, loading]);
+
+  // Stop any running stream when the panel unmounts (for example on sign out).
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   async function send() {
     const q = input.trim();
     if (!q || loading) return;
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: q }]);
-    setLoading(true);
-
-    // const assistantIdx = messages.length + 1;
     setMessages((prev) => [
       ...prev,
+      { role: "user", content: q },
       { role: "assistant", content: "", streaming: true },
     ]);
+    setLoading(true);
+
+    const update = (content: string, streaming: boolean) =>
+      setMessages((prev) => {
+        const copy = [...prev];
+        copy[copy.length - 1] = { role: "assistant", content, streaming };
+        return copy;
+      });
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const BASE = import.meta.env.VITE_API_URL ?? "/api";
@@ -47,6 +60,7 @@ export default function ChatPanel() {
       const token = getStoredToken();
       const res = await fetch(url, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           ...(token ? { "X-Session-Token": token } : {}),
@@ -54,8 +68,12 @@ export default function ChatPanel() {
         body: JSON.stringify({ question: q }),
       });
 
+      if (res.status === 401) {
+        update("Your session has expired. Sign out and sign in again to keep chatting.", false);
+        return;
+      }
       if (!res.ok || !res.body) {
-        throw new Error("Request failed: " + res.status);
+        throw new Error(`The assistant is unavailable (status ${res.status}).`);
       }
 
       const reader = res.body.getReader();
@@ -76,51 +94,22 @@ export default function ChatPanel() {
             const parsed = JSON.parse(line);
             if (parsed.token) {
               fullText += parsed.token;
-              setMessages((prev) => {
-                const copy = [...prev];
-                copy[copy.length - 1] = {
-                  role: "assistant",
-                  content: fullText,
-                  streaming: true,
-                };
-                return copy;
-              });
+              update(fullText, true);
             }
             if (parsed.error) {
-              fullText = parsed.error;
-              setMessages((prev) => {
-                const copy = [...prev];
-                copy[copy.length - 1] = {
-                  role: "assistant",
-                  content: "Error: " + parsed.error,
-                  streaming: false,
-                };
-                return copy;
-              });
+              fullText = "Error: " + String(parsed.error);
+              update(fullText, true);
             }
-          } catch {}
+          } catch {
+            /* ignore a partial or non-JSON chunk */
+          }
         }
       }
 
-      setMessages((prev) => {
-        const copy = [...prev];
-        copy[copy.length - 1] = {
-          role: "assistant",
-          content: fullText || "No response.",
-          streaming: false,
-        };
-        return copy;
-      });
-    } catch (err: any) {
-      setMessages((prev) => {
-        const copy = [...prev];
-        copy[copy.length - 1] = {
-          role: "assistant",
-          content: "Connection error: " + err.message,
-          streaming: false,
-        };
-        return copy;
-      });
+      update(fullText || "No response.", false);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      update(err instanceof Error ? err.message : "Could not reach the assistant.", false);
     } finally {
       setLoading(false);
     }
@@ -129,157 +118,65 @@ export default function ChatPanel() {
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send();
     }
   }
 
+  const canSend = !loading && input.trim().length > 0;
+
   return (
     <>
-      {/* Floating trigger */}
       <button
         onClick={() => setOpen((o) => !o)}
-        style={{
-          position: "fixed",
-          bottom: "24px",
-          right: "24px",
-          width: "48px",
-          height: "48px",
-          borderRadius: "50%",
-          background: open ? "var(--cyan)" : "var(--bg-elevated)",
-          border: "1px solid var(--cyan)",
-          color: open ? "var(--bg-base)" : "var(--cyan)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          transition: "all 0.2s",
-          boxShadow: "0 0 16px color-mix(in srgb, var(--cyan) 30%, transparent)",
-        }}
-        title="SentinAI Assistant"
+        aria-label={open ? "Close assistant" : "Open assistant"}
+        aria-expanded={open}
+        className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-105"
+        style={{ background: "var(--brand)", color: "#1a1a1a", boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}
       >
-        {open ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-        )}
+        {open ? <X size={20} /> : <MessageSquare size={20} />}
       </button>
 
-      {/* Chat panel */}
       {open && (
         <div
+          className="fixed bottom-24 right-6 z-40 flex flex-col overflow-hidden rounded-lg w-[min(380px,calc(100vw-3rem))] h-[min(520px,calc(100vh-8rem))]"
           style={{
-            position: "fixed",
-            bottom: "84px",
-            right: "24px",
-            width: "360px",
-            height: "480px",
             background: "var(--bg-surface)",
-            border: "0.5px solid var(--border)",
-            borderRadius: "12px",
-            display: "flex",
-            flexDirection: "column",
-            zIndex: 999,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-            overflow: "hidden",
+            border: "1px solid var(--border-strong)",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
           }}
         >
-          {/* Header */}
           <div
-            style={{
-              padding: "12px 16px",
-              borderBottom: "0.5px solid var(--border)",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "var(--bg-elevated)",
-            }}
+            className="flex items-center gap-2 px-4 h-12 shrink-0"
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
-            <div
-              style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                background: "var(--cyan)",
-                boxShadow: "0 0 6px var(--cyan)",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: "11px",
-                fontWeight: 600,
-                letterSpacing: "0.1em",
-                color: "var(--text-secondary)",
-                textTransform: "uppercase",
-              }}
-            >
-              SentinAI Assistant
-            </span>
-            <span
-              style={{
-                marginLeft: "auto",
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: "9px",
-                color: "var(--text-muted)",
-              }}
-            >
-              live context
-            </span>
+            <span className="w-2 h-2 rounded-full" style={{ background: "var(--green)" }} />
+            <span className="text-sm font-semibold">Assistant</span>
           </div>
 
-          {/* Messages */}
           <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "12px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-            }}
+            className="flex-1 overflow-y-auto p-3 flex flex-col gap-3"
+            role="log"
+            aria-live="polite"
           >
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: msg.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  style={{
-                    maxWidth: "85%",
-                    padding: "8px 12px",
-                    borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                    background: msg.role === "user" ? "var(--cyan-dim)" : "var(--bg-elevated)",
-                    border: "0.5px solid",
-                    borderColor: msg.role === "user" ? "var(--cyan)" : "var(--border)",
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: "12px",
-                    lineHeight: "1.6",
-                    color: msg.role === "user" ? "var(--cyan)" : "var(--text-secondary)",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
+                  className="max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words"
+                  style={
+                    m.role === "user"
+                      ? { background: "var(--brand)", color: "#1a1a1a" }
+                      : {
+                          background: "var(--bg-panel)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text-primary)",
+                        }
+                  }
                 >
-                  {msg.content}
-                  {msg.streaming && (
+                  {m.content}
+                  {m.streaming && (
                     <span
-                      style={{
-                        display: "inline-block",
-                        width: "6px",
-                        height: "12px",
-                        background: "var(--cyan)",
-                        marginLeft: "2px",
-                        animation: "blink 0.8s step-end infinite",
-                        verticalAlign: "middle",
-                      }}
+                      className="inline-block w-1.5 h-3.5 ml-0.5 align-middle animate-pulse"
+                      style={{ background: "var(--text-muted)" }}
                     />
                   )}
                 </div>
@@ -288,63 +185,33 @@ export default function ChatPanel() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
           <div
-            style={{
-              padding: "10px 12px",
-              borderTop: "0.5px solid var(--border)",
-              display: "flex",
-              gap: "8px",
-              alignItems: "flex-end",
-              background: "var(--bg-elevated)",
-            }}
+            className="flex items-end gap-2 p-3 shrink-0"
+            style={{ borderTop: "1px solid var(--border)" }}
           >
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder="Ask about incidents, policies..."
+              placeholder="Ask about incidents or policies"
               disabled={loading}
               rows={1}
-              style={{
-                flex: 1,
-                background: "var(--bg-base)",
-                border: "0.5px solid var(--border)",
-                borderRadius: "6px",
-                padding: "8px 10px",
-                color: "var(--text-primary)",
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: "11px",
-                resize: "none",
-                outline: "none",
-                lineHeight: "1.5",
-              }}
+              aria-label="Message"
+              className="flex-1 resize-none rounded-md px-3 py-2 text-sm outline-none transition-colors max-h-28 bg-[var(--bg-panel)] border border-[var(--border)] focus:border-[var(--brand)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-60"
             />
             <button
-              onClick={send}
-              disabled={loading || !input.trim()}
-              style={{
-                background: loading || !input.trim() ? "var(--bg-base)" : "var(--cyan-dim)",
-                border: "0.5px solid var(--cyan)",
-                borderRadius: "6px",
-                padding: "8px 12px",
-                color: loading || !input.trim() ? "var(--text-muted)" : "var(--cyan)",
-                cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: "10px",
-                transition: "all 0.15s",
-              }}
+              onClick={() => void send()}
+              disabled={!canSend}
+              aria-label="Send message"
+              className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition-opacity disabled:opacity-40"
+              style={{ background: "var(--brand)", color: "#1a1a1a" }}
             >
-              {loading ? "..." : "Send"}
+              <Send size={16} />
             </button>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-      `}</style>
     </>
   );
 }
