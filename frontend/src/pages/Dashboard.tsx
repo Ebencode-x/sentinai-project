@@ -3,7 +3,6 @@ import type { Incident } from "@/api/client";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import {
   AlertOctagon,
-  Activity,
   ShieldCheck,
   TrendingUp,
   TrendingDown,
@@ -11,6 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import ActivityFeed from "@/components/ActivityFeed";
 
 /* ── tiny helpers ────────────────────────────────────────────────────── */
 
@@ -457,57 +457,7 @@ export default function Dashboard() {
         {/* Right column */}
         <div className="flex flex-col gap-3">
 
-          {/* Audit feed */}
-          <div
-            className="rounded-lg overflow-hidden flex-1"
-            style={{ background: "var(--bg-surface)", border: "0.5px solid var(--border)" }}
-          >
-            <div
-              className="flex items-center gap-2 px-4 py-3"
-              style={{ borderBottom: "0.5px solid var(--border)" }}
-            >
-              <Activity size={14} style={{ color: "var(--cyan)" }} />
-              <span
-                className="text-[11px] font-mono font-medium tracking-widest uppercase"
-                style={{ color: "var(--text-secondary)", fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                Audit feed
-              </span>
-            </div>
-            {[
-              { color: "var(--red)",    text: "D1 validator flagged", hi: "AUTH001", tail: "on PTH-0041",         time: "2m"  },
-              { color: "var(--green)",  text: "Policy engine approved", hi: "PTH-0038", tail: " — 6/6 passed",   time: "14m" },
-              { color: "var(--amber)",  text: "Rate limiter blocked", hi: "423 reqs",  tail: " from 10.0.0.41",  time: "31m" },
-              { color: "var(--purple)", text: "EB reviewed diff for", hi: "PTH-0035",  tail: " — escalated",     time: "1h"  },
-              { color: "var(--green)",  text: "Webhook dispatched to", hi: "#security-ops", tail: "",            time: "1h"  },
-              { color: "var(--cyan)",   text: "CI", hi: "#86",           tail: " passed — 686 tests green",      time: "3h"  },
-            ].map(({ color, text, hi, tail, time }, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-2.5 px-4 py-2.5"
-                style={{ borderBottom: i < 5 ? "0.5px solid var(--border)" : undefined }}
-              >
-                <div
-                  className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                  style={{ background: color }}
-                />
-                <p
-                  className="flex-1 text-[11px] leading-relaxed font-body"
-                  style={{ color: "var(--text-secondary)", fontFamily: "'DM Sans', sans-serif" }}
-                >
-                  {text}{" "}
-                  <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{hi}</span>
-                  {tail}
-                </p>
-                <span
-                  className="text-[10px] font-mono shrink-0 mt-0.5"
-                  style={{ color: "var(--text-muted)", fontFamily: "'IBM Plex Mono', monospace" }}
-                >
-                  {time}
-                </span>
-              </div>
-            ))}
-          </div>
+          <ActivityFeed />
 
           {/* Rule coverage */}
           <div
