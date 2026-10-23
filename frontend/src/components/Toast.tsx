@@ -7,14 +7,14 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import clsx from "clsx";
+import { X } from "lucide-react";
 
 type Level = "info" | "ok" | "warn" | "error";
 
 interface Toast {
-  id:      number;
+  id: number;
   message: string;
-  level:   Level;
+  level: Level;
 }
 
 interface ToastCtx {
@@ -25,6 +25,13 @@ const Ctx = createContext<ToastCtx>({ toast: () => undefined });
 
 let _nextId = 0;
 
+const DOT: Record<Level, string> = {
+  info: "var(--text-muted)",
+  ok: "var(--green)",
+  warn: "var(--amber)",
+  error: "var(--red)",
+};
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
@@ -32,51 +39,57 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const dismiss = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
     const t = timers.current.get(id);
-    if (t) { clearTimeout(t); timers.current.delete(id); }
+    if (t) {
+      clearTimeout(t);
+      timers.current.delete(id);
+    }
   }, []);
 
-  const toast = useCallback((message: string, level: Level = "info") => {
-    const id = ++_nextId;
-    setToasts((prev) => [...prev.slice(-4), { id, message, level }]);
-    const t = setTimeout(() => dismiss(id), 4_000);
-    timers.current.set(id, t);
-  }, [dismiss]);
+  const toast = useCallback(
+    (message: string, level: Level = "info") => {
+      const id = ++_nextId;
+      setToasts((prev) => [...prev.slice(-4), { id, message, level }]);
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), 4_000)
+      );
+    },
+    [dismiss]
+  );
 
   useEffect(() => {
     const ts = timers.current;
     return () => ts.forEach(clearTimeout);
   }, []);
 
-  const colors: Record<Level, string> = {
-    info:  "border-accent/40  bg-accent/5  text-accent",
-    ok:    "border-ok/40     bg-ok/5     text-ok",
-    warn:  "border-warn/40   bg-warn/5   text-warn",
-    error: "border-red-500/40 bg-red-500/5 text-red-400",
-  };
-
-  const icons: Record<Level, string> = {
-    info: "◈", ok: "✓", warn: "▲", error: "✕",
-  };
-
   return (
     <Ctx.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+      <div
+        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
+        role="status"
+        aria-live="polite"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            onClick={() => dismiss(t.id)}
-            className={clsx(
-              "pointer-events-auto flex items-center gap-3 px-4 py-3",
-              "border rounded-sm text-xs font-mono tracking-wide",
-              "animate-slide-up cursor-pointer select-none",
-              "min-w-[260px] max-w-[420px]",
-              colors[t.level]
-            )}
+            className="pointer-events-auto flex items-center gap-3 rounded-lg px-4 py-3 text-sm min-w-[260px] max-w-[420px] animate-fade-in"
+            style={{
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border-strong)",
+              color: "var(--text-primary)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
           >
-            <span className="shrink-0">{icons[t.level]}</span>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: DOT[t.level] }} />
             <span className="flex-1">{t.message}</span>
-            <span className="shrink-0 opacity-50 text-[10px]">[×]</span>
+            <button
+              onClick={() => dismiss(t.id)}
+              aria-label="Dismiss"
+              className="shrink-0 transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              <X size={14} />
+            </button>
           </div>
         ))}
       </div>
