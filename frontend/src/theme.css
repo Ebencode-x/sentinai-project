@@ -1,0 +1,64 @@
+/* LeetCode-style theme. Unlayered, so it overrides the old variables. */
+:root {
+  --bg-base:     #1a1a1a;
+  --bg-surface:  #282828;
+  --bg-elevated: #2f2f2f;
+  --bg-panel:    #333333;
+  --bg-hover:    #3a3a3a;
+
+  --border:        rgba(255,255,255,0.10);
+  --border-strong: rgba(255,255,255,0.16);
+  --border-focus:  rgba(255,161,22,0.60);
+
+  --text-primary:   #eff1f6;
+  --text-secondary: #b3b8c4;
+  --text-muted:     #8a8f9a;
+  --text-hint:      #5c6068;
+
+  --brand:       #ffa116;
+  --brand-dim:   rgba(255,161,22,0.12);
+  --cyan:        #ffa116;
+  --cyan-dim:    rgba(255,161,22,0.12);
+  --cyan-glow:   rgba(255,161,22,0.22);
+  --green:       #2cbb5d;
+  --green-dim:   rgba(44,187,93,0.14);
+  --amber:       #ffb800;
+  --amber-dim:   rgba(255,184,0,0.14);
+  --red:         #ef4743;
+  --red-dim:     rgba(239,71,67,0.14);
+  --purple:      #a78bfa;
+  --purple-dim:  rgba(167,139,250,0.14);
+
+  --scrollbar-track: var(--bg-base);
+  --scrollbar-thumb: var(--bg-hover);
+}
+
+.light {
+  --bg-base:     #f7f8fa;
+  --bg-surface:  #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-panel:    #f2f3f5;
+  --bg-hover:    #ebedf0;
+
+  --border:        rgba(0,0,0,0.10);
+  --border-strong: rgba(0,0,0,0.16);
+  --border-focus:  rgba(255,161,22,0.70);
+
+  --text-primary:   #262626;
+  --text-secondary: #595959;
+  --text-muted:     #8c8c8c;
+  --text-hint:      #bfbfbf;
+
+  --green:       #1ea34f;
+  --green-dim:   rgba(30,163,79,0.12);
+  --amber:       #d99100;
+  --amber-dim:   rgba(217,145,0,0.12);
+  --red:         #e0352f;
+  --red-dim:     rgba(224,53,47,0.10);
+}
+
+html, body, #root {
+  font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
