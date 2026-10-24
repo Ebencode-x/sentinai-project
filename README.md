@@ -9,6 +9,8 @@
 
 No manual triage. No copy-pasting stack traces into a chatbot. No missed alerts at 3 AM.
 
+![SentinAI dashboard](docs/dashboard.png)
+
 Live instance: [sentinai.onrender.com](https://sentinai.onrender.com) (free hosting, the first request after idle can take about a minute). Access needs an account, so to explore it yourself run it locally with the Quick Start below.
 
 ---
@@ -98,7 +100,7 @@ Storage: accounts, sessions and audit events live in a SQL database (SQLite by d
 ```bash
 git clone https://github.com/Ebencode-x/sentinai-project.git
 cd sentinai-project
-cp .env.example .env          # set the admin account and your keys
+cp .env.example .env          # uncomment the admin lines and add your keys
 docker compose up
 ```
 
@@ -110,7 +112,7 @@ On first start SentinAI runs the database migrations and creates an admin accoun
 git clone https://github.com/Ebencode-x/sentinai-project.git
 cd sentinai-project
 pip install -r requirements.txt
-cp .env.example .env          # set the admin account and your keys
+cp .env.example .env          # uncomment the admin lines and add your keys
 (cd frontend && npm ci && npm run build)
 uvicorn src.main:app --reload
 ```
@@ -141,7 +143,7 @@ Copy `.env.example` to `.env`. Everything has a default except the admin account
 | `INCIDENT_DEDUPE_WINDOW` | `200` | How many fingerprints are remembered |
 | `AUTONOMY_MODE` | `propose_only` | `propose_only` or `auto_pr` |
 | `GITHUB_TOKEN` / `GITHUB_REPO` | empty | Needed only for pull request creation |
-| `SLACK_WEBHOOK_URL` | empty | Optional Slack alerts |
+| `SENTINAI_SLACK_WEBHOOK_URL` | empty | Optional Slack alerts |
 | `SENTINAI_CORS_ORIGINS` | empty | Comma-separated allowed origins |
 
 ---
