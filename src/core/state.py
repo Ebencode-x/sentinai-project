@@ -8,6 +8,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from src.core.audit import AuditLogger, audit_logger
 from src.core.config import settings
 from src.core.metrics import metrics
 from src.integrations.notifier import notify
@@ -39,6 +40,7 @@ class AppState:
     autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
     notification_channels: list[dict] = field(default_factory=list)
     rollback_ledger: list[dict] = field(default_factory=list)
+    audit: AuditLogger = field(default_factory=lambda: audit_logger)
     total_scan_runs: int = 0
     last_scan_at_utc: datetime | None = None
     last_scan_new_incidents: int = 0
@@ -64,6 +66,7 @@ class AppState:
                 incident, autonomy_mode=self.autonomy_mode
             )
             self.recent_suggestions.append(suggestion)
+            self._record_audit(incident, suggestion)
 
             if suggestion.pr_number and suggestion.patch_file and suggestion.before_sha:
                 self.add_rollback_ledger_entry(
@@ -84,6 +87,28 @@ class AppState:
         self.last_scan_at_utc = datetime.now(UTC)
         self.last_scan_new_incidents = added
         return added
+
+    def _record_audit(self, incident: LogIncident, suggestion: RemediationSuggestion) -> None:
+        """Write one audit entry for a detected incident. Never breaks a scan."""
+        try:
+            self.audit.record(
+                incident_id=incident.incident_id,
+                model="unknown",
+                provider=suggestion.source,
+                patch_file=suggestion.patch_file,
+                patch=suggestion.proposed_patch,
+                policy_decision=None,
+                risk_tier=None,
+                review_required=suggestion.awaiting_approval,
+                patch_applied=bool(suggestion.pr_url),
+                tests_passed=None,
+                pr_url=suggestion.pr_url,
+                failure_reason=suggestion.provider_error,
+                confidence=suggestion.confidence,
+                source=suggestion.source,
+            )
+        except Exception:
+            logger.exception("Audit record failed for incident %s", incident.incident_id)
 
     def stats_snapshot(self) -> dict:
         """Lightweight runtime metrics for demos and observability export.
