@@ -80,7 +80,7 @@ export default function ChatPanel() {
       let buffer = "";
       let fullText = "";
 
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });

@@ -16,7 +16,7 @@ http.interceptors.request.use((cfg) => {
 http.interceptors.response.use(
   (res) => res,
   (err: AxiosError) => {
-    if (err.response?.status === 401 && !(err.config as any)?.skipAuthRedirect) {
+    if (err.response?.status === 401 && !(err.config as unknown as { skipAuthRedirect?: boolean } | undefined)?.skipAuthRedirect) {
       // Expired or invalid session — clear it and reload to login screen
       localStorage.removeItem("sentinai_session_token");
       localStorage.removeItem("sentinai_session_user");

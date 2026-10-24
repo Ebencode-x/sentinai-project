@@ -39,7 +39,8 @@ export const selectOpenCount      = (s: SentinaiState) =>
 export const selectResolvedCount  = (s: SentinaiState) =>
   s.incidents.filter((i) => i.status === "resolved").length;
 
-const _sortCache = new WeakMap<readonly any[], any[]>();
+type IncidentList = SentinaiState["incidents"];
+const _sortCache = new WeakMap<IncidentList, IncidentList>();
 export const selectSortedIncidents = (s: SentinaiState) => {
   if (_sortCache.has(s.incidents)) return _sortCache.get(s.incidents)!;
   const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -71,7 +72,9 @@ export const useSentinaiStore = create<SentinaiState>()(
       set({ incidentsLoading: true, incidentsError: null });
       try {
         const { data } = await api.incidents();
-        const incidents = Array.isArray(data) ? data : (data as any).incidents ?? [];
+        const incidents = Array.isArray(data)
+          ? data
+          : ((data as unknown as { incidents?: IncidentList }).incidents ?? []);
         set({ incidents, incidentsLoading: false });
       } catch (e) {
         set({ incidentsLoading: false, incidentsError: "Failed to load incidents" });

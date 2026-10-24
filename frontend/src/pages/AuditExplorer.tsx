@@ -118,7 +118,7 @@ function AuditTab() {
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const events = data ?? [];
+  const events = useMemo(() => data ?? [], [data]);
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return events.filter((e) => {
