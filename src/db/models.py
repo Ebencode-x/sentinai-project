@@ -17,7 +17,7 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -84,3 +84,26 @@ class Session(Base):
             # SQLite does not store time zones and returns naive values; they are UTC.
             expires = expires.replace(tzinfo=UTC)
         return datetime.now(UTC) >= expires
+
+
+class AuditEvent(Base):
+    """One row per AI pipeline action. Append-only by convention."""
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    incident_id: Mapped[str] = mapped_column(String(255), index=True)
+    model: Mapped[str | None] = mapped_column(String(255), default=None)
+    provider: Mapped[str | None] = mapped_column(String(100), default=None)
+    patch_file: Mapped[str | None] = mapped_column(String(1024), default=None)
+    patch_hash: Mapped[str | None] = mapped_column(String(100), default=None)
+    policy_decision: Mapped[str | None] = mapped_column(String(50), default=None)
+    risk_tier: Mapped[str | None] = mapped_column(String(50), default=None)
+    review_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    patch_applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    tests_passed: Mapped[bool | None] = mapped_column(Boolean, default=None)
+    pr_url: Mapped[str | None] = mapped_column(Text, default=None)
+    failure_reason: Mapped[str | None] = mapped_column(Text, default=None)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str | None] = mapped_column(String(100), default=None)
