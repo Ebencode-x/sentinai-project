@@ -42,8 +42,7 @@ def test_duplicates_are_collapsed_with_count():
 
 def test_newest_first_and_limit():
     entries = [
-        _entry(incident_id=f"inc-{i}", timestamp=f"2026-10-23T10:0{i}:00+00:00")
-        for i in range(5)
+        _entry(incident_id=f"inc-{i}", timestamp=f"2026-10-23T10:0{i}:00+00:00") for i in range(5)
     ]
     feed = build_feed(entries, limit=2)
     assert [e["incident_id"] for e in feed] == ["inc-4", "inc-3"]
