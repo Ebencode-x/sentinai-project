@@ -56,7 +56,7 @@ def build_feed(entries: list[dict[str, Any]], limit: int) -> list[dict[str, Any]
         title, level, detail = _classify(entry)
         raw_id = f"{key}{entry.get('timestamp')}"
         seen[key] = {
-            "id": hashlib.sha1(raw_id.encode()).hexdigest()[:12],
+            "id": hashlib.sha1(raw_id.encode(), usedforsecurity=False).hexdigest()[:12],
             "timestamp": entry.get("timestamp"),
             "incident_id": entry.get("incident_id"),
             "title": title,
