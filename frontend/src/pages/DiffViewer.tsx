@@ -1,179 +1,266 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
+import { Copy } from "lucide-react";
 import { api } from "@/api/client";
-import EmptyState from "@/components/EmptyState";
-import ErrorBanner from "@/components/ErrorBanner";
-import { FileCode, ChevronRight } from "lucide-react";
+import { useToast } from "@/components/Toast";
+import { Card, CardHeader } from "@/components/Card";
 
-function renderDiff(raw: string) {
-  return raw.split("\n").map((line, i) => {
-    const isAdd    = line.startsWith("+") && !line.startsWith("+++");
-    const isRemove = line.startsWith("-") && !line.startsWith("---");
-    const isHunk   = line.startsWith("@@");
-    const isMeta   = line.startsWith("---") || line.startsWith("+++");
+type Kind = "meta" | "hunk" | "add" | "del" | "ctx";
+interface Row {
+  kind: Kind;
+  text: string;
+  oldNo?: number;
+  newNo?: number;
+}
 
-    const bg = isAdd ? "rgba(34,201,123,0.06)" : isRemove ? "rgba(255,77,106,0.06)"
-      : isHunk ? "rgba(0,212,200,0.05)" : "transparent";
-    const color = isAdd ? "var(--green)" : isRemove ? "var(--red)"
-      : isHunk ? "var(--cyan)" : isMeta ? "var(--text-muted)" : "var(--text-secondary)";
-    const gutter = isAdd ? "+" : isRemove ? "−" : " ";
+function looksLikeDiff(raw: string): boolean {
+  return /^@@ /m.test(raw) || (/^--- /m.test(raw) && /^\+\+\+ /m.test(raw));
+}
 
-    return (
-      <div key={i} style={{ display: "flex", gap: "0", background: bg, lineHeight: "22px" }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-          color: "var(--text-muted)", width: "28px", flexShrink: 0, textAlign: "center",
-          borderRight: "0.5px solid var(--border)", userSelect: "none",
-          background: "var(--bg-elevated)" }}>{i + 1}</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-          color: "var(--text-muted)", width: "20px", flexShrink: 0, textAlign: "center",
-          userSelect: "none" }}>{gutter}</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-          color, whiteSpace: "pre", flex: 1, paddingRight: "16px" }}>
-          {line.slice(isAdd || isRemove ? 1 : 0)}
-        </span>
+function parseDiff(raw: string): Row[] {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  const rows: Row[] = [];
+  let o = 0;
+  let n = 0;
+  let inHunk = false;
+  for (const line of lines) {
+    if (line.startsWith("@@")) {
+      const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
+      if (m) {
+        o = Number(m[1]);
+        n = Number(m[2]);
+      }
+      inHunk = true;
+      rows.push({ kind: "hunk", text: line });
+    } else if (
+      !inHunk &&
+      (line.startsWith("---") || line.startsWith("+++") || line.startsWith("diff ") || line.startsWith("index "))
+    ) {
+      rows.push({ kind: "meta", text: line });
+    } else if (line.startsWith("\\")) {
+      rows.push({ kind: "meta", text: line });
+    } else if (line.startsWith("+")) {
+      rows.push({ kind: "add", text: line.slice(1), newNo: n++ });
+    } else if (line.startsWith("-")) {
+      rows.push({ kind: "del", text: line.slice(1), oldNo: o++ });
+    } else {
+      rows.push({ kind: "ctx", text: line.startsWith(" ") ? line.slice(1) : line, oldNo: o++, newNo: n++ });
+    }
+  }
+  return rows;
+}
+
+const ROW_BG: Record<Kind, string> = {
+  add: "var(--green-dim)",
+  del: "var(--red-dim)",
+  hunk: "var(--bg-panel)",
+  meta: "transparent",
+  ctx: "transparent",
+};
+const SIGN: Record<Kind, string> = { add: "+", del: "-", hunk: "", meta: "", ctx: "" };
+const SIGN_COLOR: Record<Kind, string> = {
+  add: "var(--green)",
+  del: "var(--red)",
+  hunk: "var(--text-muted)",
+  meta: "var(--text-muted)",
+  ctx: "var(--text-muted)",
+};
+
+function DiffBody({ patch }: { patch: string }) {
+  const rows = useMemo(() => parseDiff(patch), [patch]);
+  return (
+    <div className="font-mono text-xs overflow-auto max-h-[560px]" style={{ background: "var(--bg-base)" }}>
+      <div className="min-w-max py-2">
+        {rows.map((r, i) => (
+          <div
+            key={i}
+            className="flex min-h-[22px] leading-[22px]"
+            style={{
+              background: ROW_BG[r.kind],
+              color: r.kind === "meta" || r.kind === "hunk" ? "var(--text-muted)" : "var(--text-primary)",
+            }}
+          >
+            <span className="w-10 shrink-0 text-right pr-2 select-none" style={{ color: "var(--text-muted)" }}>
+              {r.oldNo ?? ""}
+            </span>
+            <span className="w-10 shrink-0 text-right pr-2 select-none" style={{ color: "var(--text-muted)" }}>
+              {r.newNo ?? ""}
+            </span>
+            <span className="w-5 shrink-0 text-center select-none" style={{ color: SIGN_COLOR[r.kind] }}>
+              {SIGN[r.kind]}
+            </span>
+            <span className="whitespace-pre pr-4">{r.text}</span>
+          </div>
+        ))}
       </div>
-    );
-  });
+    </div>
+  );
+}
+
+function confColor(p: number): string {
+  return p >= 80 ? "var(--green)" : p >= 50 ? "var(--amber)" : "var(--red)";
+}
+
+function fmt(ts: string | null | undefined): string {
+  if (!ts) return "n/a";
+  try {
+    return format(parseISO(ts), "MMM d, HH:mm");
+  } catch {
+    return "n/a";
+  }
 }
 
 export default function DiffViewer() {
+  const { toast } = useToast();
   const [selected, setSelected] = useState<string | null>(null);
 
-  const { data: suggestions = [], isLoading, error } = useQuery({
+  const { data = [], isLoading, isError } = useQuery({
     queryKey: ["suggestions"],
     queryFn: () => api.suggestions().then((r) => r.data),
     refetchInterval: 30_000,
   });
 
-  const active = suggestions.find((s) => s.id === selected) ?? suggestions[0];
+  const items = useMemo(
+    () => [...data].sort((a, b) => new Date(b.created_at_utc).getTime() - new Date(a.created_at_utc).getTime()),
+    [data]
+  );
+  const active = items.find((s) => s.id === selected) ?? items[0];
+
+  async function copyPatch() {
+    if (!active?.proposed_patch) return;
+    try {
+      await navigator.clipboard.writeText(active.proposed_patch);
+      toast("Patch copied", "ok");
+    } catch {
+      toast("Could not copy", "error");
+    }
+  }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px",
-      animation: "slideUp 0.3s ease-out both" }}>
-
+    <div className="flex flex-col gap-4">
       <div>
-        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "13px", fontWeight: 700,
-          letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-primary)" }}>
-          Diff Viewer
-        </h1>
-        <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-          color: "var(--text-muted)", marginTop: "4px" }}>
-          patch diffs from remediation suggestions
+        <h1 className="text-xl font-semibold tracking-tight">Diff</h1>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Patches proposed by remediation suggestions
         </p>
       </div>
 
-      {error && <ErrorBanner message="Failed to load suggestions." />}
-
       {isLoading ? (
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-          color: "var(--text-muted)" }}>loading…</div>
-      ) : suggestions.length === 0 ? (
-        <EmptyState message="no patches — run a scan first" />
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-16 rounded-lg animate-pulse" style={{ background: "var(--bg-surface)" }} />
+          ))}
+        </div>
+      ) : isError ? (
+        <p className="p-8 text-sm text-center" style={{ color: "var(--red)" }}>
+          Could not load suggestions.
+        </p>
+      ) : items.length === 0 ? (
+        <p className="p-8 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+          No patches yet. Run a scan from the Incidents page first.
+        </p>
       ) : (
-        <div style={{ display: "flex", gap: "12px", minHeight: "520px" }}>
-
-          {/* Patch list */}
-          <div style={{ width: "220px", flexShrink: 0, border: "0.5px solid var(--border)",
-            borderRadius: "6px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            <div style={{ padding: "8px 12px", background: "var(--bg-elevated)",
-              borderBottom: "0.5px solid var(--border)",
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-              letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-              patches · {suggestions.length}
-            </div>
-            <div style={{ overflowY: "auto", flex: 1 }}>
-              {suggestions.map((s) => {
-                const pct = Math.round(s.confidence * 100);
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
+          <Card>
+            <CardHeader title={`Patches (${items.length})`} />
+            <ul className="max-h-[640px] overflow-y-auto">
+              {items.map((s, i) => {
+                const p = Math.round(s.confidence * 100);
                 const isActive = active?.id === s.id;
-                const confColor = pct >= 80 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--red)";
                 return (
-                  <button key={s.id} onClick={() => setSelected(s.id)} style={{
-                    width: "100%", textAlign: "left", padding: "10px 12px",
-                    borderBottom: "0.5px solid var(--border)", cursor: "pointer",
-                    background: isActive ? "var(--cyan-dim)" : "var(--bg-surface)",
-                    borderLeft: `2px solid ${isActive ? "var(--cyan)" : "transparent"}`,
-                    transition: "all 0.12s", display: "block",
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-elevated)"; }}
-                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "var(--bg-surface)"; }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <FileCode size={10} strokeWidth={1.75}
-                        style={{ color: isActive ? "var(--cyan)" : "var(--text-muted)", flexShrink: 0 }} />
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-                        color: isActive ? "var(--cyan)" : "var(--text-secondary)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {s.id.slice(0, 13)}
-                      </span>
-                    </div>
-                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                      color: "var(--text-muted)", marginTop: "3px",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {s.source}
-                    </div>
-                    <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <div style={{ flex: 1, height: "2px", background: "var(--border)",
-                        borderRadius: "1px", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${pct}%`,
-                          background: confColor, borderRadius: "1px" }} />
-                      </div>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                        color: confColor }}>{pct}%</span>
-                    </div>
-                  </button>
+                  <li key={s.id} style={{ borderTop: i === 0 ? undefined : "1px solid var(--border)" }}>
+                    <button
+                      onClick={() => setSelected(s.id)}
+                      aria-current={isActive}
+                      className="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--bg-panel)]"
+                      style={{ background: isActive ? "var(--bg-hover)" : undefined }}
+                    >
+                      <p className="text-sm font-medium line-clamp-2">{s.summary}</p>
+                      <p className="text-xs mt-1 flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
+                        <span className="capitalize">{s.source}</span>
+                        <span style={{ color: confColor(p) }}>{p}%</span>
+                        <span>{fmt(s.created_at_utc)}</span>
+                      </p>
+                    </button>
+                  </li>
                 );
               })}
-            </div>
-          </div>
+            </ul>
+          </Card>
 
-          {/* Diff panel */}
-          <div style={{ flex: 1, border: "0.5px solid var(--border)", borderRadius: "6px",
-            overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            {active ? (
-              <>
-                {/* Meta bar */}
-                <div style={{ padding: "10px 16px", background: "var(--bg-elevated)",
-                  borderBottom: "0.5px solid var(--border)",
-                  display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+          {active && (
+            <Card>
+              <CardHeader
+                title="Patch"
+                action={
+                  active.proposed_patch ? (
+                    <button
+                      onClick={copyPatch}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium"
+                      style={{ color: "var(--brand)" }}
+                    >
+                      <Copy size={13} />
+                      Copy
+                    </button>
+                  ) : undefined
+                }
+              />
+              <div className="px-4 py-3">
+                <p className="text-sm">{active.summary}</p>
+                <p className="text-xs mt-2 flex flex-wrap gap-x-4 gap-y-1" style={{ color: "var(--text-muted)" }}>
+                  <span className="capitalize">Source: {active.source}</span>
+                  <span style={{ color: confColor(Math.round(active.confidence * 100)) }}>
+                    Confidence: {Math.round(active.confidence * 100)}%
+                  </span>
+                  <span>Created: {fmt(active.created_at_utc)}</span>
+                  <span className="break-all">ID: {active.id}</span>
+                </p>
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border)" }}>
+                {!active.proposed_patch ? (
+                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+                    No patch was attached to this suggestion.
+                  </p>
+                ) : looksLikeDiff(active.proposed_patch) ? (
+                  <DiffBody patch={active.proposed_patch} />
+                ) : (
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <ChevronRight size={12} strokeWidth={2} style={{ color: "var(--cyan)" }} />
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-                        color: "var(--text-primary)" }}>{active.source}</span>
-                    </div>
-                    <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
-                      color: "var(--text-muted)", marginTop: "4px", lineHeight: 1.5, maxWidth: "520px" }}>
-                      {active.summary}
+                    <p
+                      className="px-4 py-2 text-xs"
+                      style={{ background: "var(--amber-dim)", color: "var(--amber)" }}
+                    >
+                      This patch is not a unified diff, so it cannot be applied automatically. Shown as written.
                     </p>
+                    <pre
+                      className="p-4 text-xs overflow-auto max-h-[560px] whitespace-pre-wrap break-words font-mono"
+                      style={{ background: "var(--bg-base)", color: "var(--text-secondary)" }}
+                    >
+                      {active.proposed_patch}
+                    </pre>
                   </div>
-                  <div style={{ flexShrink: 0, textAlign: "right" }}>
-                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                      letterSpacing: "0.1em", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                      confidence
-                    </div>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: "22px", fontWeight: 700,
-                      color: active.confidence >= 0.8 ? "var(--green)"
-                        : active.confidence >= 0.5 ? "var(--amber)" : "var(--red)",
-                      lineHeight: 1.1 }}>
-                      {Math.round(active.confidence * 100)}%
-                    </div>
-                  </div>
-                </div>
+                )}
+              </div>
 
-                {/* Diff body */}
-                <div style={{ flex: 1, overflow: "auto",
-                  overflowY: "auto", background: "var(--bg-base)", padding: "8px 0" }}>
-                  {active.proposed_patch
-                    ? renderDiff(active.proposed_patch)
-                    : <div style={{ padding: "16px", fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: "11px", color: "var(--text-muted)" }}>
-                        no diff available for this patch
-                      </div>}
+              {active.proposed_code_fix?.trim() && (
+                <div className="px-4 py-3" style={{ borderTop: "1px solid var(--border)" }}>
+                  <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Proposed fix</p>
+                  <pre
+                    className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words font-mono"
+                    style={{
+                      background: "var(--bg-panel)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    {active.proposed_code_fix}
+                  </pre>
                 </div>
-              </>
-            ) : (
-              <EmptyState message="select a patch" />
-            )}
-          </div>
+              )}
+            </Card>
+          )}
         </div>
       )}
     </div>

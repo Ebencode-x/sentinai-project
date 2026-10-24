@@ -1,8 +1,17 @@
-import { useState, KeyboardEvent } from "react";
+import { FormEvent, useState } from "react";
+import { Eye, EyeOff, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { http } from "@/api/client";
-import { Shield, ArrowRight, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { http } from "@/api/client";
+
+// Read by the response interceptor in api/client.ts. A failed login must show
+// its own error message instead of clearing the session and reloading the page.
+const NO_AUTH_REDIRECT = { skipAuthRedirect: true } as object;
+
+const INPUT =
+  "w-full rounded-md px-3 h-10 text-sm outline-none transition-colors " +
+  "bg-[var(--bg-panel)] border border-[var(--border-strong)] focus:border-[var(--brand)] " +
+  "text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -13,7 +22,8 @@ export default function LoginPage() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit() {
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
       setError("Email and password are required");
@@ -22,175 +32,128 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await http.post("/api/auth/login", { email: trimmedEmail, password });
+      const res = await http.post(
+        "/api/auth/login",
+        { email: trimmedEmail, password },
+        NO_AUTH_REDIRECT
+      );
       login(res.data.token, { email: res.data.email, role: res.data.role }, res.data.expires_at);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      setError(status === 401 ? "Invalid email or password" : "Login failed. Try again.");
+    } catch (err) {
+      const response = (err as { response?: { status?: number } })?.response;
+      if (!response) setError("Cannot reach the server. Check your connection and try again.");
+      else if (response.status === 401) setError("Invalid email or password");
+      else setError("Login failed. Try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") handleSubmit();
-  }
-
-  const fg = "var(--text-primary)";
-
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-base)", color: fg }}>
-      <header className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "var(--cyan)" }}>
-            <Shield size={14} style={{ color: "var(--bg-base)" }} strokeWidth={2} />
-          </div>
-          <span className="font-display font-semibold text-sm" style={{ fontFamily: "Syne, sans-serif", color: fg }}>
-            SentinAI
-          </span>
-        </div>
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
+      <header className="flex items-center justify-end px-6 py-4">
         <button
           onClick={toggle}
-          className="w-8 h-8 rounded-md flex items-center justify-center"
-          style={{ color: "var(--text-muted)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
         >
-          {theme === "dark" ? <Sun size={15} strokeWidth={1.75} /> : <Moon size={15} strokeWidth={1.75} />}
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
       </header>
 
-      <div className="flex-1 flex items-center justify-center px-4">
-        <div className="w-full max-w-[360px] flex flex-col gap-8">
-          <div className="flex flex-col gap-2">
-            <h1 className="font-display font-bold text-[28px] tracking-tight" style={{ fontFamily: "Syne, sans-serif" }}>
-              Welcome back
-            </h1>
-            <p className="text-sm" style={{ fontFamily: "DM Sans, sans-serif", color: "var(--text-secondary)" }}>
-              Sign in to access the operations console.
-            </p>
+      <main className="flex-1 flex items-center justify-center px-4 pb-16">
+        <div
+          className="w-full max-w-[380px] rounded-lg p-6 flex flex-col gap-6"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        >
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--brand)" }}>
+              <svg viewBox="0 0 18 18" width="20" height="20" fill="none">
+                <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="#1a1a1a" strokeWidth="1.8" />
+                <circle cx="9" cy="9" r="2.4" fill="#1a1a1a" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Sign in to SentinAI</h1>
+              <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+                Self-healing DevOps agent
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: "var(--text-secondary)" }}>
+              <label htmlFor="email" className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                 Email
               </label>
               <input
+                id="email"
+                name="email"
                 type="email"
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                onKeyDown={handleKeyDown}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError("");
+                }}
                 placeholder="you@company.com"
                 autoFocus
                 autoComplete="username"
                 spellCheck={false}
-                className="w-full rounded-lg px-3.5 py-2.5 text-sm outline-none transition-all"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: error ? "1px solid var(--red)" : "1px solid var(--border-strong)",
-                  color: fg,
-                  fontFamily: "DM Sans, sans-serif",
-                  fontSize: "13px",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.border = error ? "1px solid var(--red)" : "1px solid var(--cyan)";
-                  e.currentTarget.style.boxShadow = error ? "0 0 0 3px var(--red-dim)" : "0 0 0 3px var(--cyan-dim)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.border = error ? "1px solid var(--red)" : "1px solid var(--border-strong)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
+                className={INPUT}
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: "var(--text-secondary)" }}>
+              <label htmlFor="password" className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                 Password
               </label>
               <div className="relative">
                 <input
+                  id="password"
+                  name="password"
                   type={visible ? "text" : "password"}
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="••••••••"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError("");
+                  }}
+                  placeholder="Your password"
                   autoComplete="current-password"
                   spellCheck={false}
-                  className="w-full rounded-lg px-3.5 py-2.5 pr-10 text-sm outline-none transition-all"
-                  style={{
-                    background: "var(--bg-surface)",
-                    border: error ? "1px solid var(--red)" : "1px solid var(--border-strong)",
-                    color: fg,
-                    fontFamily: "IBM Plex Mono, monospace",
-                    fontSize: "13px",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.border = error ? "1px solid var(--red)" : "1px solid var(--cyan)";
-                    e.currentTarget.style.boxShadow = error ? "0 0 0 3px var(--red-dim)" : "0 0 0 3px var(--cyan-dim)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.border = error ? "1px solid var(--red)" : "1px solid var(--border-strong)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
+                  className={`${INPUT} pr-10`}
                 />
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--text-muted)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                  aria-label={visible ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                 >
-                  {visible ? <EyeOff size={14} strokeWidth={1.75} /> : <Eye size={14} strokeWidth={1.75} />}
+                  {visible ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              {error && (
-                <p className="text-xs" style={{ color: "var(--red)", fontFamily: "DM Sans, sans-serif" }}>
-                  {error}
-                </p>
-              )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full rounded-lg py-2.5 flex items-center justify-center gap-2 text-sm font-medium transition-all"
-              style={{
-                background: "var(--cyan)",
-                color: "var(--bg-base)",
-                fontFamily: "DM Sans, sans-serif",
-                fontWeight: 500,
-                border: "none",
-                cursor: loading ? "wait" : "pointer",
-                opacity: loading ? 0.75 : 1,
-              }}
-              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = "0.88"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = loading ? "0.75" : "1"; }}
-            >
-              {loading ? (
-                <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "13px" }}>Signing in…</span>
-              ) : (
-                <>
-                  <span>Continue</span>
-                  <ArrowRight size={15} strokeWidth={2} />
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+            {error && (
+              <p
+                role="alert"
+                className="rounded-md px-3 py-2 text-sm"
+                style={{ background: "var(--red-dim)", color: "var(--red)" }}
+              >
+                {error}
+              </p>
+            )}
 
-      <footer className="px-6 py-4 flex items-center justify-between">
-        <span className="text-xs" style={{ color: "var(--text-muted)", fontFamily: "DM Sans, sans-serif" }}>
-          SentinAI v0.2.0
-        </span>
-        <span className="text-xs" style={{ color: "var(--text-muted)", fontFamily: "DM Sans, sans-serif" }}>
-          Self-healing DevOps agent
-        </span>
-      </footer>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md h-10 text-sm font-medium transition-opacity disabled:opacity-70"
+              style={{ background: "var(--brand)", color: "#1a1a1a", cursor: loading ? "wait" : "pointer" }}
+            >
+              {loading ? "Signing in" : "Sign in"}
+            </button>
+          </form>
+        </div>
+      </main>
     </div>
   );
 }

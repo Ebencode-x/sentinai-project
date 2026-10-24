@@ -6,9 +6,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ["'Syne'", "sans-serif"],
-        body:    ["'DM Sans'", "system-ui", "sans-serif"],
-        mono:    ["'IBM Plex Mono'", "monospace"],
+        display: ["Inter Variable", "Inter", "system-ui", "sans-serif"],
+        body:    ["Inter Variable", "Inter", "system-ui", "sans-serif"],
+        mono:    ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
         /* Map Tailwind classes → CSS variables so theme toggle is automatic */

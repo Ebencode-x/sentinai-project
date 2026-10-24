@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -81,7 +79,7 @@
     height: 100%;
     background: var(--bg-base);
     color: var(--text-primary);
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     transition: background 0.25s, color 0.25s;
@@ -97,9 +95,9 @@
 
 @layer utilities {
   /* Typography */
-  .font-display { font-family: 'Syne', sans-serif; }
-  .font-mono    { font-family: 'IBM Plex Mono', monospace; }
-  .font-body    { font-family: 'DM Sans', sans-serif; }
+  .font-display { font-family: "Inter Variable", Inter, system-ui, sans-serif; }
+  .font-mono    { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .font-body    { font-family: "Inter Variable", Inter, system-ui, sans-serif; }
 
   /* Glow helpers */
   .glow-cyan   { box-shadow: 0 0 0 1px var(--cyan), 0 0 20px var(--cyan-glow); }

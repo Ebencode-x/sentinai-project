@@ -1,514 +1,532 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { LogOut, Plus, Trash2 } from "lucide-react";
+import { api, type AutonomySettings } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useHealth } from "@/hooks/useHealth";
 import { useTheme } from "@/hooks/useTheme";
-import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/api/client";
-import {
-  Terminal, Shield, Activity, Server, Trash2,
-  RefreshCw, CheckCircle, XCircle,
-  Cpu, HardDrive, Zap, GitPullRequest, Bell, Plus, X,
-} from "lucide-react";
+import { useToast } from "@/components/Toast";
+import { Card, CardHeader } from "@/components/Card";
 
-/* ── tiny section wrapper ─────────────────────────────────────────────── */
-function Section({ title, icon: Icon, children }: {
-  title: string; icon: React.ElementType; children: React.ReactNode;
+type Tab = "general" | "automation" | "system";
+type Severity = "warning" | "critical";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "general", label: "General" },
+  { key: "automation", label: "Automation" },
+  { key: "system", label: "System" },
+];
+
+const INPUT =
+  "w-full rounded-md px-3 h-9 text-sm outline-none transition-colors " +
+  "bg-[var(--bg-panel)] border border-[var(--border)] focus:border-[var(--brand)] " +
+  "text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
+
+const BTN_GHOST =
+  "inline-flex items-center gap-2 rounded-md px-3 h-8 text-sm font-medium transition-colors " +
+  "border border-[var(--border-strong)] text-[var(--text-secondary)] " +
+  "hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-50";
+
+/* Small building blocks */
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-4 px-4 py-3 text-sm"
+      style={{ borderTop: "1px solid var(--border)" }}
+    >
+      <span style={{ color: "var(--text-secondary)" }}>{label}</span>
+      <span className="font-medium text-right break-all">{children}</span>
+    </div>
+  );
+}
+
+function Switch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  label: string;
 }) {
   return (
-    <div style={{ border: "0.5px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
-      <div style={{
-        padding: "10px 16px", display: "flex", alignItems: "center", gap: "8px",
-        borderBottom: "0.5px solid var(--border)", background: "var(--bg-elevated)",
-      }}>
-        <Icon size={13} style={{ color: "var(--text-muted)" }} strokeWidth={1.75} />
-        <span style={{
-          fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-          letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)",
-        }}>{title}</span>
-      </div>
-      <div style={{ padding: "16px", background: "var(--bg-surface)" }}>{children}</div>
-    </div>
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      className="relative w-9 h-5 rounded-full shrink-0 transition-colors disabled:opacity-50"
+      style={{ background: checked ? "var(--green)" : "var(--bg-hover)" }}
+    >
+      <span
+        className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+        style={{ transform: checked ? "translateX(16px)" : undefined }}
+      />
+    </button>
   );
 }
 
-/* ── key-value row ────────────────────────────────────────────────────── */
-function KV({ label, value, mono = true, accent }: {
-  label: string; value: string | React.ReactNode; mono?: boolean; accent?: string;
-}) {
+function AdminNote({ isAdmin }: { isAdmin: boolean }) {
+  if (isAdmin) return null;
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "7px 0", borderBottom: "0.5px solid var(--border)" }}>
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-        color: "var(--text-muted)", letterSpacing: "0.06em" }}>{label}</span>
-      <span style={{
-        fontFamily: mono ? "'IBM Plex Mono', monospace" : "'DM Sans', sans-serif",
-        fontSize: "11px", color: accent ?? "var(--text-secondary)",
-      }}>{value}</span>
-    </div>
+    <p className="px-4 pb-3 text-xs" style={{ color: "var(--text-muted)" }}>
+      Only admins can change this. You are signed in as a viewer.
+    </p>
   );
 }
 
-/* ── check row ────────────────────────────────────────────────────────── */
-function CheckRow({ name, status, latency }: { name: string; status: string; latency?: number }) {
-  const ok  = status === "ok";
-  const deg = status === "degraded";
-  const color = ok ? "var(--green)" : deg ? "var(--amber)" : "var(--red)";
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px",
-      padding: "7px 0", borderBottom: "0.5px solid var(--border)" }}>
-      {ok
-        ? <CheckCircle size={12} style={{ color: "var(--green)", flexShrink: 0 }} strokeWidth={2} />
-        : <XCircle    size={12} style={{ color,               flexShrink: 0 }} strokeWidth={2} />}
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-        color: "var(--text-secondary)", flex: 1 }}>{name}</span>
-      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px", color }}>
-        {status.toUpperCase()}
-      </span>
-      {latency != null && (
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-          color: "var(--text-muted)" }}>{latency.toFixed(1)}ms</span>
-      )}
-    </div>
-  );
+function ms(v: number | null | undefined): string {
+  return v == null ? "n/a" : `${v.toFixed(1)} ms`;
 }
 
-/* ── main ─────────────────────────────────────────────────────────────── */
-export default function Settings() {
-  const { user, logout }  = useAuth();
-  const { ready, live, isBackendUp } = useHealth();
+/* Tab: General */
+
+function GeneralTab() {
+  const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const navigate          = useNavigate();
+  const { live, isBackendUp, ready } = useHealth();
+  const navigate = useNavigate();
 
-  /* session info */
-  const expiry    = localStorage.getItem("sentinai_session_expiry");
-  const expiresAt = expiry ? new Date(expiry).toLocaleString() : "—";
+  const expiry = localStorage.getItem("sentinai_session_expiry");
+  let expiresAt = "n/a";
+  if (expiry) {
+    try {
+      expiresAt = format(new Date(expiry), "MMM d, yyyy HH:mm");
+    } catch {
+      expiresAt = "n/a";
+    }
+  }
 
-  const [apiUrl, setApiUrl]         = useState(
-    localStorage.getItem("sentinai_api_url") ?? (import.meta.env.VITE_API_URL ?? "/api")
+  const connected = isBackendUp && ready?.status === "ok";
+  const statusLabel = connected ? "Connected" : isBackendUp === null ? "Connecting" : "Unreachable";
+  const statusColor = connected ? "var(--green)" : isBackendUp === null ? "var(--text-muted)" : "var(--red)";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader title="Account" />
+        <Row label="Email">{user?.email ?? "n/a"}</Row>
+        <Row label="Role"><span className="capitalize">{user?.role ?? "n/a"}</span></Row>
+        <Row label="Session expires">{expiresAt}</Row>
+        <div className="px-4 py-3" style={{ borderTop: "1px solid var(--border)" }}>
+          <button
+            className={BTN_GHOST}
+            onClick={() => {
+              logout();
+              navigate("/login");
+            }}
+          >
+            <LogOut size={14} />
+            Sign out
+          </button>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title="Appearance" />
+        <div className="flex items-center justify-between px-4 py-3 text-sm">
+          <span style={{ color: "var(--text-secondary)" }}>Theme</span>
+          <div
+            className="flex rounded-md p-0.5"
+            style={{ background: "var(--bg-panel)", border: "1px solid var(--border)" }}
+          >
+            {(["dark", "light"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => theme !== t && toggle()}
+                className="px-3 h-7 rounded text-xs font-medium capitalize transition-colors"
+                style={{
+                  background: theme === t ? "var(--bg-hover)" : "transparent",
+                  color: theme === t ? "var(--text-primary)" : "var(--text-muted)",
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title="Backend" />
+        <Row label="API address">{import.meta.env.VITE_API_URL || "Same origin"}</Row>
+        <Row label="Service">{live?.service ?? "n/a"}</Row>
+        <Row label="Status">
+          <span className="inline-flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: statusColor }} />
+            {statusLabel}
+          </span>
+        </Row>
+      </Card>
+    </div>
   );
-  const [urlSaved, setUrlSaved]     = useState(false);
+}
 
-  /* stats */
-  const { data: stats } = useQuery({
-    queryKey: ["stats"],
-    queryFn:  () => api.stats().then((r) => r.data),
-    refetchInterval: 30_000,
-  });
+/* Tab: Automation */
 
-  const { data: autonomy, refetch: refetchAutonomy } = useQuery({
+function AutonomyCard({ isAdmin }: { isAdmin: boolean }) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const { data: autonomy, refetch } = useQuery({
     queryKey: ["autonomy"],
     queryFn: () => api.settings.getAutonomy().then((r) => r.data),
   });
-  const [autonomySaving, setAutonomySaving] = useState(false);
 
-  async function setAutonomyMode(mode: "propose_only" | "auto_pr") {
-    if (autonomy?.mode === mode || autonomySaving) return;
-    setAutonomySaving(true);
+  const options: { mode: AutonomySettings["mode"]; title: string; text: string }[] = [
+    { mode: "propose_only", title: "Propose only", text: "SentinAI suggests a fix and waits for a person to act." },
+    { mode: "auto_pr", title: "Auto-create PR", text: "SentinAI opens a GitHub pull request for each detected patch." },
+  ];
+
+  async function choose(mode: AutonomySettings["mode"]) {
+    if (!isAdmin || saving || autonomy?.mode === mode) return;
+    if (
+      mode === "auto_pr" &&
+      !window.confirm("SentinAI will open pull requests on its own. Make sure branch protection and required review are on. Continue?")
+    ) {
+      return;
+    }
+    setSaving(true);
     try {
       await api.settings.setAutonomy(mode);
-      await refetchAutonomy();
+      await refetch();
+      toast("Autonomy mode updated", "ok");
+    } catch {
+      toast("Could not update autonomy mode", "error");
     } finally {
-      setAutonomySaving(false);
+      setSaving(false);
     }
   }
 
-  const { data: channels, refetch: refetchChannels } = useQuery({
+  return (
+    <Card>
+      <CardHeader title="Autonomy" />
+      <p className="px-4 pt-3 text-sm" style={{ color: "var(--text-muted)" }}>
+        Controls what SentinAI does once it has a proposed fix.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
+        {options.map((o) => {
+          const active = autonomy?.mode === o.mode;
+          return (
+            <button
+              key={o.mode}
+              onClick={() => choose(o.mode)}
+              disabled={!isAdmin || saving}
+              className="text-left rounded-lg p-3 transition-colors disabled:cursor-not-allowed"
+              style={{
+                background: active ? "var(--brand-dim)" : "var(--bg-panel)",
+                border: `1px solid ${active ? "var(--brand)" : "var(--border)"}`,
+                opacity: !isAdmin && !active ? 0.6 : 1,
+              }}
+            >
+              <p className="text-sm font-medium">{o.title}</p>
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>{o.text}</p>
+            </button>
+          );
+        })}
+      </div>
+      {autonomy?.mode === "auto_pr" && (
+        <p
+          className="mx-4 mb-4 rounded-md px-3 py-2 text-xs"
+          style={{ background: "var(--amber-dim)", color: "var(--amber)" }}
+        >
+          Auto-create PR is on. Branch protection and required review are strongly recommended.
+        </p>
+      )}
+      <AdminNote isAdmin={isAdmin} />
+    </Card>
+  );
+}
+
+function ChannelsCard({ isAdmin }: { isAdmin: boolean }) {
+  const { toast } = useToast();
+  const { data: channels = [], refetch } = useQuery({
     queryKey: ["channels"],
     queryFn: () => api.settings.listChannels().then((r) => r.data),
   });
-  const [showChannelForm, setShowChannelForm] = useState(false);
-  const [channelName, setChannelName] = useState("");
-  const [channelType, setChannelType] = useState<"slack" | "webhook">("slack");
-  const [channelUrl, setChannelUrl] = useState("");
-  const [channelSeverities, setChannelSeverities] = useState<Array<"warning" | "critical">>(["critical"]);
-  const [channelSaving, setChannelSaving] = useState(false);
 
-  function toggleSeverity(sev: "warning" | "critical") {
-    setChannelSeverities((prev) =>
-      prev.includes(sev) ? prev.filter((s) => s !== sev) : [...prev, sev]
-    );
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"slack" | "webhook">("slack");
+  const [url, setUrl] = useState("");
+  const [severities, setSeverities] = useState<Severity[]>(["critical"]);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function toggleSeverity(s: Severity) {
+    setSeverities((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   }
 
-  async function createChannel() {
-    if (!channelName.trim() || !channelUrl.trim() || channelSeverities.length === 0) return;
-    setChannelSaving(true);
+  function resetForm() {
+    setName("");
+    setUrl("");
+    setType("slack");
+    setSeverities(["critical"]);
+    setFormError(null);
+    setShowForm(false);
+  }
+
+  async function create() {
+    if (!name.trim()) return setFormError("Give the channel a name.");
+    if (!/^https:\/\//i.test(url.trim())) return setFormError("The address must start with https://");
+    if (severities.length === 0) return setFormError("Pick at least one severity.");
+    setSaving(true);
+    setFormError(null);
     try {
       await api.settings.createChannel({
-        name: channelName.trim(),
-        type: channelType,
-        url: channelUrl.trim(),
-        severities: channelSeverities,
+        name: name.trim(),
+        type,
+        url: url.trim(),
+        severities,
         enabled: true,
       });
-      setChannelName("");
-      setChannelUrl("");
-      setChannelSeverities(["critical"]);
-      setShowChannelForm(false);
-      await refetchChannels();
+      await refetch();
+      resetForm();
+      toast("Channel added", "ok");
+    } catch {
+      setFormError("Could not save the channel.");
     } finally {
-      setChannelSaving(false);
+      setSaving(false);
     }
   }
 
-  async function toggleChannelEnabled(id: string, enabled: boolean) {
-    await api.settings.updateChannel(id, { enabled: !enabled });
-    await refetchChannels();
+  async function toggle(id: string, enabled: boolean) {
+    try {
+      await api.settings.updateChannel(id, { enabled: !enabled });
+      await refetch();
+    } catch {
+      toast("Could not update the channel", "error");
+    }
   }
 
-  async function deleteChannel(id: string) {
-    await api.settings.deleteChannel(id);
-    await refetchChannels();
+  async function remove(id: string, label: string) {
+    if (!window.confirm(`Delete the channel "${label}"?`)) return;
+    try {
+      await api.settings.deleteChannel(id);
+      await refetch();
+      toast("Channel deleted", "ok");
+    } catch {
+      toast("Could not delete the channel", "error");
+    }
   }
-
-  /* uptime */
-  const [uptime, setUptime] = useState(0);
-  useEffect(() => {
-    const start = Date.now();
-    const id = setInterval(() => setUptime(Math.floor((Date.now() - start) / 1000)), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const fmtUptime = (s: number) => {
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    return [h, m, sec].map((v) => String(v).padStart(2, "0")).join(":");
-  };
-
-  function saveUrl() {
-    localStorage.setItem("sentinai_api_url", apiUrl.trim());
-    setUrlSaved(true);
-    setTimeout(() => setUrlSaved(false), 2000);
-  }
-
-  function handleSignOut() {
-    logout();
-    navigate("/login");
-  }
-
-  const overallOk = isBackendUp && ready?.status === "ok";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px",
-      maxWidth: "720px", animation: "slideUp 0.3s ease-out both" }}>
+    <Card>
+      <CardHeader title="Notification channels" />
+      <p className="px-4 pt-3 text-sm" style={{ color: "var(--text-muted)" }}>
+        Send incident alerts to Slack or a webhook, filtered by severity.
+      </p>
 
-      {/* page header */}
-      <div style={{ marginBottom: "4px" }}>
-        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "13px",
-          fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase",
-          color: "var(--text-primary)" }}>Settings</h1>
-        <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-          color: "var(--text-muted)", marginTop: "4px", letterSpacing: "0.04em" }}>
-          operator console · runtime configuration
+      {channels.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+          No channels yet.
         </p>
-      </div>
-
-      {/* ── Authentication ───────────────────────────────────────────── */}
-      <Section title="Authentication" icon={Shield}>
-        <KV label="EMAIL" value={user?.email ?? "—"} />
-        <KV label="ROLE" value={(user?.role ?? "—").toUpperCase()} />
-        <KV label="SESSION EXPIRES" value={expiresAt} />
-        <div style={{ marginTop: "12px" }}>
-          <button onClick={handleSignOut} style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            letterSpacing: "0.08em", padding: "7px 14px",
-            border: "0.5px solid var(--border-strong)", borderRadius: "6px",
-            background: "var(--bg-elevated)", color: "var(--text-secondary)",
-            cursor: "pointer", transition: "all 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "var(--red)";
-            e.currentTarget.style.color = "var(--red)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "var(--border-strong)";
-            e.currentTarget.style.color = "var(--text-secondary)";
-          }}>
-            <Trash2 size={11} strokeWidth={1.75} />
-            clear session
-          </button>
-        </div>
-      </Section>
-
-      {/* ── Backend connection ───────────────────────────────────────── */}
-      <Section title="Backend" icon={Server}>
-        <KV label="URL" value={import.meta.env.VITE_API_URL ?? "/api"} />
-        <KV label="SERVICE" value={live?.service ?? "—"} />
-        <KV label="STATUS" value={
-          <span style={{ color: overallOk ? "var(--green)" : "var(--red)",
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px" }}>
-            {overallOk ? "CONNECTED" : isBackendUp === null ? "CONNECTING" : "UNREACHABLE"}
-          </span>
-        } />
-        <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-          <label style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            color: "var(--text-muted)", letterSpacing: "0.06em" }}>
-            OVERRIDE URL (session only)
-          </label>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)}
-              style={{ flex: 1, background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
-                borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", outline: "none" }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--cyan)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border-strong)"; }}
-              placeholder="https://your-backend.com" />
-            <button onClick={saveUrl} style={{
-              padding: "7px 14px", borderRadius: "6px",
-              border: urlSaved ? "0.5px solid var(--green)" : "0.5px solid var(--border-strong)",
-              background: urlSaved ? "var(--green-dim)" : "var(--bg-elevated)",
-              color: urlSaved ? "var(--green)" : "var(--text-secondary)",
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-              cursor: "pointer", transition: "all 0.2s",
-            }}>
-              {urlSaved ? "saved" : "save"}
-            </button>
-          </div>
-        </div>
-      </Section>
-
-      {/* ── Autonomy ─────────────────────────────────────────────────── */}
-      <Section title="Autonomy" icon={GitPullRequest}>
-        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
-          color: "var(--text-muted)", marginBottom: "12px", lineHeight: 1.6 }}>
-          Controls what SentinAI does once it has a proposed fix.
-        </p>
-        <div style={{ display: "flex", gap: "8px" }}>
-          {([
-            { mode: "propose_only" as const, label: "Propose only" },
-            { mode: "auto_pr" as const, label: "Auto-create PR" },
-          ]).map(({ mode, label }) => {
-            const active = autonomy?.mode === mode;
-            return (
-              <button key={mode} onClick={() => setAutonomyMode(mode)} disabled={autonomySaving}
-                style={{
-                  flex: 1, fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-                  letterSpacing: "0.06em", padding: "9px 12px", borderRadius: "6px",
-                  border: active ? "0.5px solid var(--cyan)" : "0.5px solid var(--border-strong)",
-                  background: active ? "var(--bg-base)" : "var(--bg-elevated)",
-                  color: active ? "var(--cyan)" : "var(--text-secondary)",
-                  cursor: autonomySaving ? "wait" : "pointer", transition: "all 0.15s",
-                }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {autonomy?.mode === "auto_pr" && (
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9.5px",
-            color: "var(--amber)", lineHeight: 1.5, marginTop: "10px" }}>
-            ⚠ SentinAI will open GitHub PRs automatically for detected patches. Branch protection + required review strongly recommended.
-          </p>
-        )}
-      </Section>
-
-      {/* ── Notification Channels ───────────────────────────────────── */}
-      <Section title="Notification Channels" icon={Bell}>
-        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
-          color: "var(--text-muted)", marginBottom: "12px", lineHeight: 1.6 }}>
-          Route incident alerts to Slack or a webhook, filtered by severity.
-        </p>
-
-        {channels && channels.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
-            {channels.map((ch) => (
-              <div key={ch.id} style={{
-                display: "flex", alignItems: "center", gap: "10px",
-                padding: "8px 10px", borderRadius: "6px",
-                border: "0.5px solid var(--border)", background: "var(--bg-elevated)",
-                opacity: ch.enabled ? 1 : 0.5,
-              }}>
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-                  color: "var(--text-secondary)", flex: 1 }}>
-                  {ch.name} <span style={{ color: "var(--text-muted)" }}>· {ch.type}</span>
-                </span>
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                  color: "var(--text-muted)" }}>
-                  {ch.severities.join(", ")}
-                </span>
-                <button onClick={() => toggleChannelEnabled(ch.id, ch.enabled)} style={{
-                  fontFamily: "'IBM Plex Mono', monospace", fontSize: "9px",
-                  padding: "3px 8px", borderRadius: "4px", cursor: "pointer",
-                  border: `0.5px solid ${ch.enabled ? "var(--green)" : "var(--border-strong)"}`,
-                  background: "transparent",
-                  color: ch.enabled ? "var(--green)" : "var(--text-muted)",
-                }}>
-                  {ch.enabled ? "ON" : "OFF"}
-                </button>
-                <button onClick={() => deleteChannel(ch.id)} style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  color: "var(--text-muted)", padding: "3px", display: "flex",
-                }}>
-                  <X size={12} strokeWidth={1.75} />
-                </button>
+      ) : (
+        <ul className="mt-3">
+          {channels.map((ch) => (
+            <li
+              key={ch.id}
+              className="flex items-center gap-3 px-4 py-3"
+              style={{ borderTop: "1px solid var(--border)", opacity: ch.enabled ? 1 : 0.6 }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{ch.name}</p>
+                <p className="text-xs capitalize" style={{ color: "var(--text-muted)" }}>
+                  {ch.type} · {ch.severities.join(", ")}
+                </p>
               </div>
-            ))}
-          </div>
-        )}
+              <Switch
+                checked={ch.enabled}
+                onChange={() => toggle(ch.id, ch.enabled)}
+                disabled={!isAdmin}
+                label={`Enable ${ch.name}`}
+              />
+              <button
+                onClick={() => remove(ch.id, ch.name)}
+                disabled={!isAdmin}
+                aria-label={`Delete ${ch.name}`}
+                className="w-8 h-8 rounded-md flex items-center justify-center transition-colors disabled:opacity-40 hover:bg-[var(--red-dim)] hover:text-[var(--red)]"
+                style={{ color: "var(--text-muted)" }}
+              >
+                <Trash2 size={15} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {!showChannelForm ? (
-          <button onClick={() => setShowChannelForm(true)} style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            letterSpacing: "0.06em", padding: "7px 14px",
-            border: "0.5px solid var(--border-strong)", borderRadius: "6px",
-            background: "var(--bg-elevated)", color: "var(--text-secondary)",
-            cursor: "pointer",
-          }}>
-            <Plus size={11} strokeWidth={1.75} />
-            add channel
-          </button>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <input value={channelName} onChange={(e) => setChannelName(e.target.value)}
-              placeholder="Channel name" style={{
-                background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
-                borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", outline: "none",
-              }} />
-            <div style={{ display: "flex", gap: "8px" }}>
-              <select value={channelType} onChange={(e) => setChannelType(e.target.value as "slack" | "webhook")}
-                style={{
-                  flex: 1, background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
-                  borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
-                  fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px",
-                }}>
+      {isAdmin && (
+        <div className="p-4" style={{ borderTop: "1px solid var(--border)" }}>
+          {!showForm ? (
+            <button className={BTN_GHOST} onClick={() => setShowForm(true)}>
+              <Plus size={14} />
+              Add channel
+            </button>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} placeholder="Channel name" />
+              <select
+                className={INPUT}
+                value={type}
+                onChange={(e) => setType(e.target.value as "slack" | "webhook")}
+              >
                 <option value="slack">Slack</option>
                 <option value="webhook">Webhook</option>
               </select>
+              <input
+                className={INPUT}
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://hooks.slack.com/... or your endpoint"
+              />
+              <div className="flex gap-4">
+                {(["warning", "critical"] as const).map((s) => (
+                  <label key={s} className="inline-flex items-center gap-2 text-sm capitalize cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={severities.includes(s)}
+                      onChange={() => toggleSeverity(s)}
+                      className="accent-[var(--brand)]"
+                    />
+                    {s}
+                  </label>
+                ))}
+              </div>
+              {formError && <p className="text-xs" style={{ color: "var(--red)" }}>{formError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={create}
+                  disabled={saving}
+                  className="rounded-md px-3.5 h-9 text-sm font-medium transition-opacity disabled:opacity-60"
+                  style={{ background: "var(--brand)", color: "#1a1a1a" }}
+                >
+                  {saving ? "Saving" : "Save channel"}
+                </button>
+                <button className={BTN_GHOST} onClick={resetForm}>Cancel</button>
+              </div>
             </div>
-            <input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)}
-              placeholder="https://hooks.slack.com/... or https://your-endpoint.com" style={{
-                background: "var(--bg-base)", border: "0.5px solid var(--border-strong)",
-                borderRadius: "6px", padding: "7px 10px", color: "var(--text-primary)",
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", outline: "none",
-              }} />
-            <div style={{ display: "flex", gap: "12px" }}>
-              {(["warning", "critical"] as const).map((sev) => (
-                <label key={sev} style={{
-                  display: "flex", alignItems: "center", gap: "6px", cursor: "pointer",
-                  fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-                  color: "var(--text-secondary)",
-                }}>
-                  <input type="checkbox" checked={channelSeverities.includes(sev)}
-                    onChange={() => toggleSeverity(sev)} />
-                  {sev}
-                </label>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={createChannel} disabled={channelSaving} style={{
-                flex: 1, fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-                padding: "7px 14px", borderRadius: "6px",
-                border: "0.5px solid var(--cyan)", background: "var(--bg-base)",
-                color: "var(--cyan)", cursor: channelSaving ? "wait" : "pointer",
-              }}>
-                {channelSaving ? "saving…" : "save channel"}
-              </button>
-              <button onClick={() => setShowChannelForm(false)} style={{
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-                padding: "7px 14px", borderRadius: "6px",
-                border: "0.5px solid var(--border-strong)", background: "var(--bg-elevated)",
-                color: "var(--text-secondary)", cursor: "pointer",
-              }}>
-                cancel
-              </button>
-            </div>
-          </div>
+          )}
+        </div>
+      )}
+      <AdminNote isAdmin={isAdmin} />
+    </Card>
+  );
+}
+
+/* Tab: System */
+
+function SystemTab() {
+  const { ready } = useHealth();
+  const { data: stats } = useQuery({
+    queryKey: ["stats"],
+    queryFn: () => api.stats().then((r) => r.data),
+    refetchInterval: 30_000,
+  });
+
+  const m = stats?.llm_metrics;
+  const rate = m?.fallback_rate ?? stats?.fallback_rate;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader title="Health checks" />
+        {ready?.checks?.length ? (
+          ready.checks.map((c, i) => {
+            const color = c.status === "ok" ? "var(--green)" : c.status === "degraded" ? "var(--amber)" : "var(--red)";
+            return (
+              <div
+                key={c.name}
+                className="flex items-center gap-3 px-4 py-3 text-sm"
+                style={{ borderTop: i === 0 ? undefined : "1px solid var(--border)" }}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                <span className="flex-1 min-w-0 truncate">{c.name}</span>
+                <span className="text-xs capitalize" style={{ color }}>{c.status}</span>
+                {c.latency_ms != null && (
+                  <span className="text-xs w-16 text-right" style={{ color: "var(--text-muted)" }}>
+                    {c.latency_ms.toFixed(1)} ms
+                  </span>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+            No readiness data yet.
+          </p>
         )}
-      </Section>
+      </Card>
 
-      {/* ── System diagnostics ───────────────────────────────────────── */}
-      <Section title="Diagnostics" icon={Activity}>
-        {ready?.checks?.length
-          ? ready.checks.map((c) => (
-              <CheckRow key={c.name} name={c.name} status={c.status} latency={c.latency_ms} />
-            ))
-          : <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-              color: "var(--text-muted)" }}>no readiness data</p>}
-      </Section>
+      <Card>
+        <CardHeader title="Runtime" />
+        <Row label="LLM provider">{stats?.llm_provider ?? "n/a"}</Row>
+        <Row label="Scan runs">{stats?.total_scan_runs ?? "n/a"}</Row>
+        <Row label="Suggestions">{m?.total_suggestions ?? stats?.total_suggestions ?? "n/a"}</Row>
+        <Row label="Fallback rate">
+          <span style={{ color: rate != null && rate > 0.2 ? "var(--amber)" : undefined }}>
+            {rate != null ? `${(rate * 100).toFixed(1)}%` : "n/a"}
+          </span>
+        </Row>
+        <Row label="Average latency">{ms(m?.avg_latency_ms ?? stats?.avg_latency_ms)}</Row>
+        <Row label="p95 latency">{ms(m?.p95_latency_ms ?? stats?.p95_latency_ms)}</Row>
+      </Card>
 
-      {/* ── Runtime metrics ──────────────────────────────────────────── */}
-      <Section title="Runtime" icon={Cpu}>
-        <KV label="SCAN RUNS"     value={String(stats?.total_scan_runs ?? "—")} />
-        <KV label="SUGGESTIONS"   value={String(stats?.total_suggestions ?? "—")} />
-        <KV label="FALLBACK RATE" value={
-          stats?.fallback_rate != null ? `${(stats.fallback_rate * 100).toFixed(1)}%` : "—"
-        } accent={
-          stats?.fallback_rate != null && stats.fallback_rate > 0.2
-            ? "var(--amber)" : undefined
-        } />
-        <KV label="AVG LATENCY"   value={
-          stats?.avg_latency_ms != null ? `${stats.avg_latency_ms.toFixed(1)}ms` : "—"
-        } />
-        <KV label="P95 LATENCY"   value={
-          stats?.p95_latency_ms != null ? `${stats.p95_latency_ms.toFixed(1)}ms` : "—"
-        } />
-        <KV label="SESSION UPTIME" value={fmtUptime(uptime)} />
-      </Section>
+      <Card>
+        <CardHeader title="Configuration" />
+        <Row label="Log file">{stats?.log_file_path ?? "n/a"}</Row>
+        <Row label="Dedupe window">{stats?.dedupe_window_max ?? "n/a"}</Row>
+        <Row label="Fingerprints tracked">{stats?.dedupe_fingerprints_tracked ?? "n/a"}</Row>
+      </Card>
+    </div>
+  );
+}
 
-      {/* ── Appearance ───────────────────────────────────────────────── */}
-      <Section title="Appearance" icon={Zap}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "7px 0" }}>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            color: "var(--text-muted)", letterSpacing: "0.06em" }}>THEME</span>
-          <button onClick={toggle} style={{
-            display: "flex", alignItems: "center", gap: "8px",
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-            letterSpacing: "0.08em", padding: "6px 14px",
-            border: "0.5px solid var(--border-strong)", borderRadius: "6px",
-            background: "var(--bg-elevated)", color: "var(--text-secondary)",
-            cursor: "pointer", transition: "all 0.15s", textTransform: "uppercase",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "var(--cyan)";
-            e.currentTarget.style.color = "var(--cyan)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "var(--border-strong)";
-            e.currentTarget.style.color = "var(--text-secondary)";
-          }}>
-            <RefreshCw size={10} strokeWidth={2} />
-            {theme === "dark" ? "dark" : "light"}
-          </button>
-        </div>
-        <KV label="FONT STACK" value="Syne · DM Sans · IBM Plex Mono" mono={false} />
-        <KV label="VERSION"    value="v0.2.0" />
-      </Section>
+/* Page */
 
-      {/* ── Build info ───────────────────────────────────────────────── */}
-      <Section title="Build" icon={HardDrive}>
-        <KV label="RELEASE"    value="v0.2.0" />
-        <KV label="PROVIDER"   value={stats ? "claude" : "—"} />
-        <KV label="LOG PATH"   value={stats?.log_file_path ?? "—"} />
-        <KV label="DEDUPE WIN" value={stats?.dedupe_window_max != null ? `${stats.dedupe_window_max}` : "—"} />
-      </Section>
+export default function Settings() {
+  const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>("general");
+  const isAdmin = user?.role === "admin";
 
-      {/* ── Danger zone ──────────────────────────────────────────────── */}
-      <Section title="Danger Zone" icon={Terminal}>
-        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px",
-          color: "var(--text-muted)", marginBottom: "12px", lineHeight: 1.6 }}>
-          Destructive operations. No confirmation dialogs.
+  return (
+    <div className="flex flex-col gap-4 max-w-3xl">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Your account, automation rules and system status
         </p>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          {[
-            { label: "sign out + clear session", action: handleSignOut, color: "var(--red)" },
-          ].map(({ label, action, color }) => (
-            <button key={label} onClick={action} style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px",
-              letterSpacing: "0.08em", padding: "7px 14px",
-              border: `0.5px solid ${color}`, borderRadius: "6px",
-              background: "transparent", color,
-              cursor: "pointer", transition: "all 0.15s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--red-dim)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </Section>
+      </div>
 
+      <div className="flex gap-1" style={{ borderBottom: "1px solid var(--border)" }}>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className="px-3 py-2 text-sm font-medium -mb-px transition-colors"
+            style={{
+              color: tab === t.key ? "var(--text-primary)" : "var(--text-muted)",
+              borderBottom: `2px solid ${tab === t.key ? "var(--brand)" : "transparent"}`,
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "general" && <GeneralTab />}
+      {tab === "automation" && (
+        <div className="flex flex-col gap-4">
+          <AutonomyCard isAdmin={isAdmin} />
+          <ChannelsCard isAdmin={isAdmin} />
+        </div>
+      )}
+      {tab === "system" && <SystemTab />}
     </div>
   );
 }
