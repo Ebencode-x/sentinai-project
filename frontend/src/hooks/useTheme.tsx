@@ -23,7 +23,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.classList.remove("light");
     }
-    try { localStorage.setItem("sentinai-theme", theme); } catch {}
+    try { localStorage.setItem("sentinai-theme", theme); } catch { /* storage blocked, theme still applies */ }
   }, [theme]);
 
   const toggle = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
