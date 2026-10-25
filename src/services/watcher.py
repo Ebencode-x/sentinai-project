@@ -18,6 +18,10 @@ from pathlib import Path
 
 from src.models.events import LogIncident
 
+# Numbers, hex ids and memory addresses differ on every occurrence of the same bug
+# (line numbers, row ids, request ids), so they are masked before hashing.
+_VOLATILE_TOKENS = re.compile(r"0x[0-9a-fA-F]+|\b[0-9a-fA-F]{8,}\b|\d+")
+
 
 @dataclass
 class WatcherConfig:
@@ -53,6 +57,10 @@ class LogWatcher:
         re.compile(r"^[A-Za-z_][A-Za-z0-9_]*Error:.*"),  # Column-0 Python errors (common in logs)
         re.compile(r"^\s+at\s+"),  # Typical JS/TS stack trace lines
         re.compile(r"^\s+\.\.\."),  # Continuation marker
+        re.compile(r"^\s+\S"),  # Any indented line (code lines, carets, wrapped frames)
+        re.compile(r"^Traceback \(most recent call last\):"),  # Start of a nested trace
+        re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception):"),  # Dotted exception lines
+        re.compile(r"^(During handling of the above|The above exception was)"),  # Chaining
     )
 
     def __init__(self, config: WatcherConfig) -> None:
@@ -78,6 +86,11 @@ class LogWatcher:
             A list of newly appended lines (without trailing newline).
         """
         self._ensure_log_file_exists()
+
+        # The file can shrink (rotation, redeploy wipe, manual truncate). A cursor
+        # past the end would read nothing forever, so start over from the top.
+        if self._log_path.stat().st_size < self._file_position:
+            self._file_position = 0
 
         with self._log_path.open("r", encoding="utf-8", errors="replace") as file:
             file.seek(self._file_position)
@@ -199,7 +212,8 @@ class LogWatcher:
     @staticmethod
     def _fingerprint(text: str) -> str:
         """Deterministic short hash used for deduping similar incidents."""
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        normalized = _VOLATILE_TOKENS.sub("#", text)
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
     def _ensure_log_file_exists(self) -> None:
         """Create parent directory and log file when missing."""
