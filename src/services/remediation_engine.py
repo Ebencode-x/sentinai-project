@@ -67,8 +67,7 @@ class RemediationEngine:
         suggestion = suggestion.model_copy(
             update={
                 "autonomy_mode": autonomy_mode,
-                "model": suggestion.model
-                or getattr(self._llm_client, "model_name", "unknown"),
+                "model": suggestion.model or getattr(self._llm_client, "model_name", "unknown"),
             }
         )
 
