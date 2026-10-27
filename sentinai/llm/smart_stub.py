@@ -58,7 +58,7 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
         "SentinAI scans logs continuously using a real-time watcher. "
         "It detects ERROR, EXCEPTION, CRITICAL, and HTTP 5xx signals. "
         "Each scan deduplicates incidents via fingerprint window to prevent alert fatigue. "
-        "Trigger manual scan: POST /scan-now with X-API-Key header. "
+        "Trigger manual scan: POST /scan-now with an X-Session-Token header. "
         "Check /stats for total scan runs, last timestamp, and detection rates.",
     ),
     (
@@ -135,7 +135,7 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
             "compose",
         ),
         "Deployment: SentinAI runs as ebencodex/sentinai:latest on Docker Hub. "
-        "Required env vars: SENTINAI_API_KEY, ANTHROPIC_API_KEY, LLM_PROVIDER=claude. "
+        "Required env vars: ANTHROPIC_API_KEY, LLM_PROVIDER=claude. "
         "Container runs as non-root (UID 1001) with read-only filesystem. "
         "For Kubernetes: use Secret resources, never ConfigMaps for credentials. "
         "Expose port 7860. Liveness: GET /health/live | Readiness: GET /health/ready.",
@@ -153,7 +153,8 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
             "redoc",
             "openapi",
         ),
-        "SentinAI REST API — all endpoints require X-API-Key header except /health. "
+        "SentinAI REST API: endpoints need an X-Session-Token header "
+        "from POST /api/auth/login, except /health and POST /api/ingest. "
         "Key routes: GET /incidents, GET /suggestions, POST /scan-now, POST /chat, "
         "GET /stats, GET /metrics, GET /health/live, GET /health/ready. "
         "Interactive docs: /docs (Swagger UI) and /redoc. "
@@ -189,7 +190,7 @@ _RESPONSES: list[tuple[tuple[str, ...], str]] = [
             "webhook",
             "slack",
         ),
-        "Required env vars: SENTINAI_API_KEY, ANTHROPIC_API_KEY, LLM_PROVIDER=claude. "
+        "Required env vars: ANTHROPIC_API_KEY, LLM_PROVIDER=claude. "
         "Optional: SENTINAI_SLACK_WEBHOOK_URL for Slack alerts, "
         "SENTINAI_GENERIC_WEBHOOK_URL for custom integrations, "
         "MAX_RECENT_INCIDENTS (default 100), LLM_TIMEOUT_SECONDS (default 25). "
