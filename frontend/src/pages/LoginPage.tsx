@@ -66,12 +66,7 @@ export default function LoginPage() {
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         >
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--brand)" }}>
-              <svg viewBox="0 0 18 18" width="20" height="20" fill="none">
-                <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="#1a1a1a" strokeWidth="1.8" />
-                <circle cx="9" cy="9" r="2.4" fill="#1a1a1a" />
-              </svg>
-            </div>
+            <img src="/apple-touch-icon.png" alt="SentinAI" className="w-10 h-10 rounded-lg" />
             <div>
               <h1 className="text-xl font-semibold tracking-tight">Sign in to SentinAI</h1>
               <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>

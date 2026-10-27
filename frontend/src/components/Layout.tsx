@@ -43,12 +43,7 @@ export default function Layout() {
       >
         <div className="h-full max-w-[1200px] mx-auto px-4 flex items-center gap-6">
           <div className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "var(--brand)" }}>
-              <svg viewBox="0 0 18 18" width="15" height="15" fill="none">
-                <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="#1a1a1a" strokeWidth="1.8" />
-                <circle cx="9" cy="9" r="2.4" fill="#1a1a1a" />
-              </svg>
-            </div>
+            <img src="/apple-touch-icon.png" alt="SentinAI" className="w-7 h-7 rounded-md" />
             <span className="text-[15px] font-semibold tracking-tight">SentinAI</span>
           </div>
 
