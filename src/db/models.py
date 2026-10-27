@@ -107,3 +107,7 @@ class AuditEvent(Base):
     failure_reason: Mapped[str | None] = mapped_column(Text, default=None)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     source: Mapped[str | None] = mapped_column(String(100), default=None)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None, index=True
+    )
+    archived_by: Mapped[str | None] = mapped_column(String(255), default=None)
