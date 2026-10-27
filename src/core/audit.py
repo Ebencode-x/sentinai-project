@@ -4,7 +4,8 @@ Every AI action produces a structured JSON log entry that is:
 - Appended to logs/sentinai-audit.jsonl (one JSON object per line)
 - Also stored in the audit_events table when a session factory is given, so
   history survives redeploys (the log file does not on Render)
-- Never modified or deleted by the system
+- Never modified or deleted by the pipeline. An admin can archive events (hidden
+  from the feed, rows kept) and permanently delete events that are archived
 - Queryable by incident_id
 
 Reads prefer the database and fall back to the file when the database is empty
@@ -42,7 +43,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import Delete, Update, delete, select, update
 from sqlalchemy.orm import Session
 
 from src.db.models import AuditEvent
@@ -85,6 +86,16 @@ def _to_dict(row: AuditEvent) -> dict:
         "failure_reason": row.failure_reason,
         "confidence": row.confidence,
         "source": row.source,
+    }
+
+
+def _row_entry(row: AuditEvent) -> dict:
+    """Feed entry for one stored row: audit fields, row id and archive info."""
+    return {
+        **_to_dict(row),
+        "row_id": row.id,
+        "archived_at": _iso(row.archived_at) if row.archived_at else None,
+        "archived_by": row.archived_by,
     }
 
 
@@ -167,6 +178,60 @@ class AuditLogger:
         if rows:
             return rows
         return [e for e in self._file_tail(10_000) if e.get("incident_id") == incident_id]
+
+    def tail_rows(self, n: int = 50, *, archived: bool = False) -> list[dict]:
+        """Entries for the dashboard feed, each with its database row_id.
+
+        Archived events are returned only when archived=True. The log file is
+        used only when there is no database or it cannot be read, so archived
+        events never come back from the file.
+        """
+        if self._session_factory is None:
+            return [] if archived else self._file_tail(n)
+        try:
+            with self._session_factory() as db:
+                flag = (
+                    AuditEvent.archived_at.is_not(None)
+                    if archived
+                    else AuditEvent.archived_at.is_(None)
+                )
+                stmt = select(AuditEvent).where(flag).order_by(AuditEvent.id.desc()).limit(n)
+                rows = db.execute(stmt).scalars().all()
+                return [_row_entry(row) for row in reversed(rows)]
+        except Exception as exc:
+            logger.warning("Audit database read failed, using file: %s", exc)
+            return [] if archived else self._file_tail(n)
+
+    def archive(self, ids: list[int], by: str) -> int:
+        """Hide events from the feed. The rows are kept. Returns rows changed."""
+        stmt = (
+            update(AuditEvent)
+            .where(AuditEvent.id.in_(ids), AuditEvent.archived_at.is_(None))
+            .values(archived_at=datetime.now(UTC), archived_by=by)
+        )
+        return self._write(stmt)
+
+    def restore(self, ids: list[int]) -> int:
+        """Bring archived events back into the feed. Returns rows changed."""
+        stmt = (
+            update(AuditEvent)
+            .where(AuditEvent.id.in_(ids), AuditEvent.archived_at.is_not(None))
+            .values(archived_at=None, archived_by=None)
+        )
+        return self._write(stmt)
+
+    def delete_archived(self, ids: list[int]) -> int:
+        """Permanently delete events that are already archived. Returns rows deleted."""
+        stmt = delete(AuditEvent).where(AuditEvent.id.in_(ids), AuditEvent.archived_at.is_not(None))
+        return self._write(stmt)
+
+    def _write(self, stmt: Update | Delete) -> int:
+        if self._session_factory is None:
+            return 0
+        with self._session_factory() as db:
+            result = db.execute(stmt)
+            db.commit()
+            return result.rowcount or 0
 
     # ------------------------------------------------------------------
     # File storage

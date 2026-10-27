@@ -60,7 +60,9 @@ def test_classification():
 
 def test_route_returns_feed(monkeypatch):
     entries = [_entry(), _entry(incident_id="inc-2")]
-    monkeypatch.setattr(audit_routes.audit_logger, "tail", lambda n=50: entries)
+    monkeypatch.setattr(
+        audit_routes.audit_logger, "tail_rows", lambda n=50, archived=False: entries
+    )
     app = FastAPI()
     app.include_router(router, prefix="/api")
     app.dependency_overrides[require_user] = lambda: None
