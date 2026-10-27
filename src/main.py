@@ -102,6 +102,16 @@ _frontend_dist = __import__("pathlib").Path(__file__).resolve().parent.parent / 
 if _frontend_dist.exists():
     app.mount("/assets", StaticFiles(directory=_frontend_dist / "assets"), name="assets")
 
+    _PUBLIC_FILES = frozenset(
+        {
+            "favicon.svg",
+            "favicon-48.png",
+            "apple-touch-icon.png",
+            "og-image.png",
+            "robots.txt",
+        }
+    )
+
     @app.get("/favicon.svg")
     async def favicon():
         return FileResponse(_frontend_dist / "favicon.svg")
@@ -112,5 +122,9 @@ if _frontend_dist.exists():
         include_in_schema=False,
     )
     async def spa_fallback(full_path: str):
+        if full_path in _PUBLIC_FILES:
+            asset = _frontend_dist / full_path
+            if asset.is_file():
+                return FileResponse(asset)
         index = _frontend_dist / "index.html"
         return FileResponse(index)

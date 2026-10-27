@@ -124,7 +124,7 @@ function AuditTab() {
     return events.filter((e) => {
       if (level !== "all" && e.level !== level) return false;
       if (!needle) return true;
-      return [e.title, e.incident_id, e.patch_file, e.detail, e.provider]
+      return [e.title, e.incident_id, e.patch_file, e.detail, e.provider, e.model]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle));
     });
@@ -224,6 +224,7 @@ function AuditTab() {
                             <Field label="Incident ID">{e.incident_id ?? "n/a"}</Field>
                             <Field label="Patch file">{e.patch_file ?? "n/a"}</Field>
                             <Field label="Provider">{e.provider ?? "n/a"}</Field>
+                            <Field label="Model">{e.model ?? "n/a"}</Field>
                             <Field label="Source">{e.source ?? "n/a"}</Field>
                             <Field label="Pull request">
                               {e.pr_url ? (
