@@ -68,6 +68,7 @@ def build_feed(entries: list[dict[str, Any]], limit: int) -> list[dict[str, Any]
             "pr_url": entry.get("pr_url"),
             "risk_tier": entry.get("risk_tier"),
             "confidence": entry.get("confidence"),
+            "model": entry.get("model"),
             "count": 1,
         }
     return list(seen.values())[:limit]
