@@ -8,6 +8,7 @@ export interface AuditEvent {
   level: "success" | "warning" | "danger" | "info";
   detail: string;
   provider: string | null;
+  model: string | null;
   source: string | null;
   patch_file: string | null;
   pr_url: string | null;
