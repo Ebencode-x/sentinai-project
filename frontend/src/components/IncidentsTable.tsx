@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { Search } from "lucide-react";
 import type { Incident } from "@/api/client";

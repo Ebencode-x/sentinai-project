@@ -1,5 +1,5 @@
 import { formatDistanceToNow, parseISO } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Card, CardHeader } from "@/components/Card";
 import { useAudit } from "@/hooks/useAudit";
 
