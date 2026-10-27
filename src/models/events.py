@@ -37,6 +37,10 @@ class RemediationSuggestion(BaseModel):
     risks: str
     source: Literal["stub", "provider", "fallback"] = "stub"
     provider_error: str | None = None
+    model: str | None = Field(
+        default=None,
+        description="Model that produced this suggestion, e.g. stub or a provider model id.",
+    )
 
     # Milestone 2 fields — optional so existing data stays valid.
     proposed_patch: str | None = Field(

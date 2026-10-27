@@ -47,6 +47,8 @@ class _LLMJsonResponse(BaseModel):
 class BaseLLMClient(ABC):
     """Abstract interface for analyzing incidents with an LLM."""
 
+    model_name: str = "unknown"
+
     @abstractmethod
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:
         """Return a remediation suggestion generated from incident context."""
@@ -65,6 +67,8 @@ class StubLLMClient(BaseLLMClient):
     - Allows end-to-end demos without external API keys.
     - Keeps architecture ready for provider replacement.
     """
+
+    model_name = "stub"
 
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:
         return RemediationSuggestion(
@@ -118,6 +122,7 @@ class OpenAILLMClient(BaseLLMClient):
     def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
         self._api_key = api_key
         self._model = model or "gpt-4o-mini"
+        self.model_name = self._model
         self._timeout_seconds = timeout_seconds
 
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:
@@ -153,6 +158,7 @@ class ClaudeLLMClient(BaseLLMClient):
     def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
         self._api_key = api_key
         self._model = model or "claude-sonnet-4-20250514"
+        self.model_name = self._model
         self._timeout_seconds = timeout_seconds
 
     def analyze_incident(self, incident: LogIncident) -> RemediationSuggestion:

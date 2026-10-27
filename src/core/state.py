@@ -93,7 +93,7 @@ class AppState:
         try:
             self.audit.record(
                 incident_id=incident.incident_id,
-                model="unknown",
+                model=suggestion.model or "unknown",
                 provider=suggestion.source,
                 patch_file=suggestion.patch_file,
                 patch=suggestion.proposed_patch,

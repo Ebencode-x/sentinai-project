@@ -39,6 +39,7 @@ class RemediationEngine:
                 update={
                     "source": "fallback",
                     "provider_error": "Rate limit: too many LLM calls per minute.",
+                    "model": self._stub.model_name,
                     "confidence": 0.1,
                 }
             )
@@ -54,6 +55,7 @@ class RemediationEngine:
                 update={
                     "source": "fallback",
                     "provider_error": str(exc)[:4000],
+                    "model": self._stub.model_name,
                     "summary": f"{base.summary} (Provider error; heuristic fallback.)",
                     "confidence": min(base.confidence, 0.35),
                 }
@@ -62,7 +64,12 @@ class RemediationEngine:
             latency_ms = (time.perf_counter() - t0) * 1000
             if suggestion is not None:
                 metrics.record(latency_ms=latency_ms, source=suggestion.source)
-        suggestion = suggestion.model_copy(update={"autonomy_mode": autonomy_mode})
+        suggestion = suggestion.model_copy(
+            update={
+                "autonomy_mode": autonomy_mode,
+                "model": suggestion.model or getattr(self._llm_client, "model_name", "unknown"),
+            }
+        )
 
         if suggestion.proposed_patch and autonomy_mode != "auto_pr":
             logger.info(
