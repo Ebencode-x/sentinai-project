@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router";
-import { Sun, Moon, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import ThemeIcon from "@/components/ThemeIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useHealth } from "@/hooks/useHealth";
 import { useToast } from "@/components/Toast";
@@ -72,7 +73,7 @@ export default function Layout() {
               title={theme === "dark" ? "Light mode" : "Dark mode"}
               className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
             >
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+              <ThemeIcon dark={theme === "dark"} />
             </button>
             <span className="hidden md:block text-xs px-2" style={{ color: "var(--text-muted)" }}>
               {user?.email}

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
-import { Eye, EyeOff, Moon, Sun } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
+import ThemeIcon from "@/components/ThemeIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { http } from "@/api/client";
@@ -56,7 +57,7 @@ export default function LoginPage() {
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
         >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          <ThemeIcon dark={theme === "dark"} />
         </button>
       </header>
 

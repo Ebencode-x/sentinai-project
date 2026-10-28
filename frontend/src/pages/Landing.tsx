@@ -1,7 +1,5 @@
 import type { CSSProperties } from "react";
 import { Link } from "react-router";
-import { Sun, Moon } from "lucide-react";
-import { useTheme } from "@/hooks/useTheme";
 import { useMotionProfile } from "@/hooks/useMotion";
 import Reveal from "@/components/Reveal";
 import "./landing.css";
@@ -64,11 +62,10 @@ function Terminal() {
 
 export default function Landing() {
   const m = useMotionProfile();
-  const { theme, toggle } = useTheme();
   const wrap = "max-w-[1120px] mx-auto px-5 md:px-8";
 
   return (
-    <div data-motion={m} style={{ background: "var(--bg-base)", color: "var(--text-primary)" }} className="min-h-screen">
+    <div data-motion={m} style={{ background: "var(--bg-base)", color: "var(--text-primary)" }} className="ln-root min-h-screen">
       <header className="sticky top-0 z-30 h-14" style={{ background: "var(--bg-surface)", borderBottom: "1px solid var(--border)" }}>
         <div className={`${wrap} h-full flex items-center gap-8`}>
           <Link to="/" className="flex items-center gap-2 shrink-0">
@@ -81,20 +78,13 @@ export default function Landing() {
             <a href="#security" className="ln-navlink transition-colors">Security</a>
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={toggle}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
-            >
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
             <Link to="/login" className="ln-btn ln-primary rounded-md px-4 py-1.5 text-sm font-semibold">Sign in</Link>
           </div>
         </div>
       </header>
 
       <main>
-        <section className={`${wrap} pt-14 md:pt-24 pb-12 md:pb-16 grid md:grid-cols-[1.05fr_1fr] gap-10 md:gap-14 items-center`}>
+        <section className={`${wrap} pt-14 md:pt-24 pb-12 md:pb-16 grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-10 md:gap-14 items-center`}>
           <Reveal>
             <h1 className="text-[40px] md:text-[58px] leading-[1.05] font-semibold tracking-tight">
               Your logs already know <span style={{ color: "var(--brand)" }}>what broke.</span>
@@ -130,7 +120,7 @@ export default function Landing() {
               </p>
             </Reveal>
             <div className="ln-track mt-12" />
-            <div className="mt-8 md:mt-8 grid gap-8 md:grid-cols-4 md:gap-10">
+            <div className="mt-8 md:mt-8 grid grid-cols-1 gap-8 md:grid-cols-4 md:gap-10">
               {STEPS.map((s, i) => (
                 <Reveal key={s.n} delay={i * 80}>
                   <div className="ln-num text-sm font-semibold" style={{ color: "var(--brand)" }}>{s.n}</div>
@@ -143,7 +133,7 @@ export default function Landing() {
         </section>
 
         <section id="integrate" className="ln-anchor" style={{ borderTop: "1px solid var(--border)" }}>
-          <div className={`${wrap} py-16 md:py-24 grid md:grid-cols-[1fr_1.2fr] gap-10 md:gap-14 items-center`}>
+          <div className={`${wrap} py-16 md:py-24 grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-10 md:gap-14 items-center`}>
             <Reveal>
               <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">One request to connect a service</h2>
               <p className="mt-3 max-w-[460px]" style={{ color: "var(--text-secondary)" }}>
@@ -161,7 +151,7 @@ export default function Landing() {
         </section>
 
         <section id="security" className="ln-anchor" style={{ borderTop: "1px solid var(--border)" }}>
-          <div className={`${wrap} py-16 md:py-24 grid md:grid-cols-[1fr_1.4fr] gap-10 md:gap-14`}>
+          <div className={`${wrap} py-16 md:py-24 grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-10 md:gap-14`}>
             <Reveal>
               <h2 className="text-2xl md:text-4xl font-semibold tracking-tight">Built to be trusted with your logs</h2>
               <p className="mt-3 max-w-[420px]" style={{ color: "var(--text-secondary)" }}>
@@ -171,7 +161,7 @@ export default function Landing() {
             <div>
               {GUARDS.map((g, i) => (
                 <Reveal key={g.name} delay={i * 60}>
-                  <div className="py-5 grid sm:grid-cols-[200px_1fr] gap-1 sm:gap-6" style={{ borderTop: i === 0 ? "none" : "1px solid var(--border)" }}>
+                  <div className="py-5 grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-1 sm:gap-6" style={{ borderTop: i === 0 ? "none" : "1px solid var(--border)" }}>
                     <div className="font-semibold">{g.name}</div>
                     <div className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{g.text}</div>
                   </div>

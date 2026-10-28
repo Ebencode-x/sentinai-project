@@ -42,3 +42,21 @@
 .ln-num { font-family: "Inter Variable", Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .ln-sans { font-family: "Inter Variable", Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; font-size: 13px; }
 .ln-k { display: inline-block; min-width: 76px; color: var(--text-muted); }
+
+/* Landing is always dark: redeclare the dark tokens on the landing root. */
+.ln-root {
+  color-scheme: dark;
+  overflow-x: clip;
+  --bg-base: #1a1a1a; --bg-surface: #282828; --bg-elevated: #2f2f2f; --bg-panel: #333333; --bg-hover: #3a3a3a;
+  --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.16); --border-focus: rgba(255,161,22,0.60);
+  --text-primary: #eff1f6; --text-secondary: #b3b8c4; --text-muted: #8a8f9a; --text-hint: #5c6068;
+  --green: #2cbb5d; --green-dim: rgba(44,187,93,0.14);
+  --amber: #ffb800; --amber-dim: rgba(255,184,0,0.14);
+  --red: #ef4743; --red-dim: rgba(239,71,67,0.14);
+}
+
+/* Phones: grid children may shrink, so wide content scrolls inside its own box
+   or wraps, and never widens the page. */
+.ln-root .grid > * { min-width: 0; }
+.ln-root h1, .ln-root h2 { overflow-wrap: break-word; }
+.ln-sans { white-space: pre-wrap; overflow-wrap: anywhere; }
