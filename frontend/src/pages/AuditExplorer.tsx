@@ -1,10 +1,12 @@
 import { Fragment, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ChevronRight, ExternalLink, Search, X } from "lucide-react";
 import { api, type Suggestion } from "@/api/client";
-import type { AuditEvent } from "@/api/audit";
+import { archiveEvents, deleteEvents, restoreEvents, type AuditEvent } from "@/api/audit";
 import { useAudit } from "@/hooks/useAudit";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/components/Toast";
 import { Card } from "@/components/Card";
 
 type Tab = "audit" | "suggestions";
@@ -110,13 +112,54 @@ function SkeletonRows() {
   );
 }
 
+type Action = "archive" | "restore" | "delete";
+
+const DONE: Record<Action, string> = {
+  archive: "archived",
+  restore: "restored",
+  delete: "deleted",
+};
+
+function ActionLink({
+  onClick,
+  disabled,
+  tone = "default",
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "default" | "danger" | "muted";
+  children: React.ReactNode;
+}) {
+  const color =
+    tone === "danger" ? "var(--red)" : tone === "muted" ? "var(--text-muted)" : "var(--text-primary)";
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="text-xs font-medium hover:underline disabled:opacity-50 disabled:no-underline"
+      style={{ color }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /* Audit log tab */
 
 function AuditTab() {
-  const { data, isLoading, isError } = useAudit(200);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const [archivedView, setArchivedView] = useState(false);
+  const { data, isLoading, isError } = useAudit(200, archivedView);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirming, setConfirming] = useState(false);
 
   const events = useMemo(() => data ?? [], [data]);
   const rows = useMemo(() => {
@@ -130,6 +173,50 @@ function AuditTab() {
     });
   }, [events, level, q]);
 
+  const selectable = useMemo(() => rows.filter((e) => e.row_ids.length > 0), [rows]);
+  const selectedEvents = useMemo(
+    () => events.filter((e) => selected.includes(e.id)),
+    [events, selected]
+  );
+  const selectedIds = useMemo(() => selectedEvents.flatMap((e) => e.row_ids), [selectedEvents]);
+  const allSelected = selectable.length > 0 && selectable.every((e) => selected.includes(e.id));
+
+  const act = useMutation({
+    mutationFn: ({ kind, ids }: { kind: Action; ids: number[] }) =>
+      kind === "archive" ? archiveEvents(ids) : kind === "restore" ? restoreEvents(ids) : deleteEvents(ids),
+    onSuccess: (changed, { kind }) => {
+      qc.invalidateQueries({ queryKey: ["audit"] });
+      setSelected([]);
+      setConfirming(false);
+      toast(`${changed} event${changed === 1 ? "" : "s"} ${DONE[kind]}`, "ok");
+    },
+    onError: () => toast("Action failed", "error"),
+  });
+
+  function switchView(next: boolean) {
+    setArchivedView(next);
+    setSelected([]);
+    setConfirming(false);
+    setOpenId(null);
+  }
+
+  function toggle(id: string) {
+    setConfirming(false);
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  function toggleAll() {
+    setConfirming(false);
+    setSelected(allSelected ? [] : selectable.map((e) => e.id));
+  }
+
+  const colCount = isAdmin ? 7 : 6;
+  const emptyText = archivedView
+    ? "No archived events."
+    : events.length === 0
+      ? "No audit events yet. They appear after the first scan."
+      : "No events match this filter.";
+
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -137,6 +224,7 @@ function AuditTab() {
           {LEVEL_FILTERS.map((f) => (
             <Chip key={f.key} active={level === f.key} onClick={() => setLevel(f.key)}>{f.label}</Chip>
           ))}
+          <Chip active={archivedView} onClick={() => switchView(!archivedView)}>Archived</Chip>
         </div>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -146,17 +234,79 @@ function AuditTab() {
         </div>
       </div>
 
+      {isAdmin && selectedEvents.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-4 px-4 py-2"
+          style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-panel)" }}
+        >
+          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            {selectedEvents.length} selected
+          </span>
+          {confirming ? (
+            <>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                Delete {selectedEvents.length} permanently? This cannot be undone.
+              </span>
+              <ActionLink
+                tone="danger"
+                disabled={act.isPending}
+                onClick={() => act.mutate({ kind: "delete", ids: selectedIds })}
+              >
+                Delete
+              </ActionLink>
+              <ActionLink tone="muted" onClick={() => setConfirming(false)}>Cancel</ActionLink>
+            </>
+          ) : (
+            <>
+              {archivedView ? (
+                <>
+                  <ActionLink
+                    disabled={act.isPending}
+                    onClick={() => act.mutate({ kind: "restore", ids: selectedIds })}
+                  >
+                    Restore
+                  </ActionLink>
+                  <ActionLink tone="danger" disabled={act.isPending} onClick={() => setConfirming(true)}>
+                    Delete permanently
+                  </ActionLink>
+                </>
+              ) : (
+                <ActionLink
+                  disabled={act.isPending}
+                  onClick={() => act.mutate({ kind: "archive", ids: selectedIds })}
+                >
+                  Archive
+                </ActionLink>
+              )}
+              <ActionLink tone="muted" onClick={() => setSelected([])}>Clear</ActionLink>
+            </>
+          )}
+        </div>
+      )}
+
       {isLoading ? (
         <SkeletonRows />
       ) : isError ? (
         <Message tone="error" text="Could not load the audit log." />
       ) : rows.length === 0 ? (
-        <Message text={events.length === 0 ? "No audit events yet. They appear after the first scan." : "No events match this filter."} />
+        <Message text={emptyText} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[680px]">
             <thead>
               <tr style={{ color: "var(--text-muted)" }}>
+                {isAdmin && (
+                  <th className="w-10 pl-4 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      disabled={selectable.length === 0}
+                      aria-label="Select all events"
+                      style={{ accentColor: "var(--brand)" }}
+                    />
+                  </th>
+                )}
                 <th className="w-8" />
                 <th className="text-left font-medium text-xs px-2 py-2">Event</th>
                 <th className="text-left font-medium text-xs px-2 py-2 w-28">Status</th>
@@ -170,6 +320,7 @@ function AuditTab() {
                 const st = LEVEL_STYLE[e.level] ?? LEVEL_STYLE.info;
                 const open = openId === e.id;
                 const p = pctOf(e.confidence);
+                const picked = selected.includes(e.id);
                 return (
                   <Fragment key={e.id}>
                     <tr
@@ -177,6 +328,18 @@ function AuditTab() {
                       className="cursor-pointer transition-colors hover:bg-[var(--bg-panel)]"
                       style={{ borderTop: "1px solid var(--border)", background: open ? "var(--bg-panel)" : undefined }}
                     >
+                      {isAdmin && (
+                        <td className="pl-4" onClick={(ev) => ev.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={picked}
+                            onChange={() => toggle(e.id)}
+                            disabled={e.row_ids.length === 0}
+                            aria-label="Select event"
+                            style={{ accentColor: "var(--brand)" }}
+                          />
+                        </td>
+                      )}
                       <td className="pl-3">
                         <ChevronRight
                           size={14}
@@ -219,7 +382,7 @@ function AuditTab() {
                     </tr>
                     {open && (
                       <tr style={{ background: "var(--bg-base)" }}>
-                        <td colSpan={6} className="px-4 py-4">
+                        <td colSpan={colCount} className="px-4 py-4">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Field label="Incident ID">{e.incident_id ?? "n/a"}</Field>
                             <Field label="Patch file">{e.patch_file ?? "n/a"}</Field>
@@ -242,6 +405,12 @@ function AuditTab() {
                               )}
                             </Field>
                             <Field label="Occurrences">{e.count}</Field>
+                            {e.archived_at && (
+                              <Field label="Archived">
+                                {fmt(e.archived_at)}
+                                {e.archived_by ? ` by ${e.archived_by}` : ""}
+                              </Field>
+                            )}
                           </div>
                           {e.detail && (
                             <div className="mt-4">
