@@ -27,16 +27,16 @@ const STEPS = [
   { n: "04", name: "Audit", text: "Each suggestion is recorded with its model and waits for your review." },
 ];
 
-// Verify the header name and body fields against src/api before shipping.
 const SNIPPET = [
   "curl -X POST https://sentinai.onrender.com/api/ingest \\",
   "  -H \"X-Ingest-Key: $SENTINAI_INGEST_KEY\" \\",
   "  -H \"Content-Type: application/json\" \\",
-  "  -d '{\"source\": \"orders-api\", \"lines\": [\"ERROR KeyError: customer_id\"]}'",
+  "  -d '{\"source\": \"orders-api\", \"events\": [{\"message\": \"KeyError: customer_id\"}]}'",
 ];
 
 const GUARDS = [
-  { name: "Secret sanitizer", text: "Keys, tokens and credentials are scrubbed from log lines before any model sees them." },
+  { name: "Personal data masking", text: "Emails, phone numbers, IP addresses, OTPs and credentials are masked before a line is ever written." },
+  { name: "Tamper-proof ingest", text: "The server writes every log line itself, so a client can never forge one." },
   { name: "Prompt injection defense", text: "Instructions hidden inside logs are treated as data, never as commands." },
   { name: "Patch validator", text: "Suggested code is parsed and checked structurally before it is shown." },
   { name: "Audit trail", text: "Every decision is stored with its time, provider and model, and can be reviewed." },
