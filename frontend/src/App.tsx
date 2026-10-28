@@ -9,6 +9,7 @@ import PolicyEditor from "@/pages/PolicyEditor";
 import DiffViewer from "@/pages/DiffViewer";
 import Settings from "@/pages/Settings";
 import LoginPage from "@/pages/LoginPage";
+import Landing from "@/pages/Landing";
 import { useAuth, AuthProvider } from "@/hooks/useAuth";
 import { useEffect, useRef } from "react";
 import { startPolling, stopPolling } from "@/store/sentinai";
@@ -49,8 +50,8 @@ function AppRoutes() {
       <PollingManager />
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-        <Route path="/" element={isAuthenticated ? <Layout /> : <Navigate to="/login" replace />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing />} />
+        <Route element={isAuthenticated ? <Layout /> : <Navigate to="/login" replace />}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="incidents" element={<IncidentTimeline />} />
           <Route path="audit" element={<AuditExplorer />} />
@@ -58,7 +59,7 @@ function AppRoutes() {
           <Route path="diff" element={<DiffViewer />} />
           <Route path="settings" element={<Settings />} />
         </Route>
-        <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
+        <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
       </Routes>
     </BrowserRouter>
   );
