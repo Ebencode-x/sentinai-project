@@ -10,21 +10,27 @@ PY="${1:-python3}"
 # Pick a free port so a leftover process can never answer for us.
 PORT="${SMOKE_PORT:-$("$PY" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}"
 WORK="$(mktemp -d)"
+BASE_URL="${SMOKE_DATABASE_URL:-${TEST_DATABASE_URL:-${DATABASE_URL:-}}}"
+[ -n "$BASE_URL" ] || { echo "SMOKE FAIL: set TEST_DATABASE_URL to a Postgres database" >&2; exit 1; }
+SCHEMA="smoke_$$"
 LOG="$WORK/server.log"
 PID=""
 
 cleanup() {
   [ -n "$PID" ] && kill "$PID" 2>/dev/null || true
+  "$PY" scripts/pg_schema.py drop "$BASE_URL" "$SCHEMA" >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
 
 fail() { echo "SMOKE FAIL: $1" >&2; echo "--- server log ---" >&2; tail -25 "$LOG" >&2 || true; exit 1; }
 
+DB_URL="$("$PY" scripts/pg_schema.py create "$BASE_URL" "$SCHEMA")"
+
 start_server() {
   : > "$LOG"
   env -i PATH="$PATH" HOME="$WORK" \
-    DATABASE_URL="sqlite:///$WORK/sentinai.db" LOG_FILE_PATH="$WORK/app.log" \
+    DATABASE_URL="$DB_URL" LOG_FILE_PATH="$WORK/app.log" \
     "$PY" -m uvicorn src.main:app --port "$PORT" > "$LOG" 2>&1 &
   PID=$!
   i=0

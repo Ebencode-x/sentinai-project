@@ -18,11 +18,10 @@ from src.main import app
 
 
 @pytest.fixture
-def fresh_db(tmp_path, monkeypatch):
-    """An empty SQLite file, migrated to the latest schema."""
-    url = f"sqlite:///{tmp_path / 'fresh.db'}"
-    run_migrations(url)
-    engine = create_engine(url, connect_args={"check_same_thread": False})
+def fresh_db(pg_url, monkeypatch):
+    """An empty Postgres schema, migrated to the latest revision."""
+    run_migrations(pg_url)
+    engine = create_engine(pg_url)
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     monkeypatch.delenv("SENTINAI_ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("SENTINAI_ADMIN_PASSWORD", raising=False)
@@ -30,23 +29,21 @@ def fresh_db(tmp_path, monkeypatch):
     engine.dispose()
 
 
-def test_migrations_create_the_auth_tables(tmp_path):
-    url = f"sqlite:///{tmp_path / 'm.db'}"
-    run_migrations(url)
-    tables = set(inspect(create_engine(url)).get_table_names())
+def test_migrations_create_the_auth_tables(pg_url):
+    run_migrations(pg_url)
+    tables = set(inspect(create_engine(pg_url)).get_table_names())
     assert {"accounts", "users", "sessions"} <= tables
 
 
-def test_migrations_are_idempotent(tmp_path):
-    url = f"sqlite:///{tmp_path / 'm.db'}"
-    run_migrations(url)
-    run_migrations(url)  # second run must be a harmless no-op
+def test_migrations_are_idempotent(pg_url):
+    run_migrations(pg_url)
+    run_migrations(pg_url)  # second run must be a harmless no-op
 
 
-def test_migrations_do_not_replace_app_logging(tmp_path):
+def test_migrations_do_not_replace_app_logging(pg_url):
     root_handlers = list(logging.getLogger().handlers)
     app_logger = logging.getLogger("src.some.module")
-    run_migrations(f"sqlite:///{tmp_path / 'm.db'}")
+    run_migrations(pg_url)
     assert logging.getLogger().handlers == root_handlers
     assert not app_logger.disabled
 

@@ -8,9 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from src.api import audit_routes
 from src.api.deps import require_user
@@ -38,16 +36,11 @@ def _record(log: AuditLogger, incident_id: str) -> None:
 
 
 @pytest.fixture
-def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
+def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pg_engine):
+    Base.metadata.create_all(pg_engine)
     log = AuditLogger(
         tmp_path / "audit.jsonl",
-        session_factory=sessionmaker(engine, expire_on_commit=False),
+        session_factory=sessionmaker(pg_engine, expire_on_commit=False),
     )
     monkeypatch.setattr(audit_routes, "audit_logger", log)
     current = {"role": Role.ADMIN}
