@@ -10,7 +10,7 @@ jobs:
   # ─────────────────────────────────────────────
   # STAGE 1 — Quality Gate (Tests + Coverage)
   # ─────────────────────────────────────────────
- test:
+  test:
     name: "[ TEST ] pytest + coverage"
     runs-on: ubuntu-24.04
 
@@ -34,6 +34,7 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      DATABASE_URL: postgresql+psycopg2://sentinai:sentinai@localhost:5432/sentinai_test
 
     steps:
       - name: Checkout repository
