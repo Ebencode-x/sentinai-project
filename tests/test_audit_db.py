@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.core.audit import AuditLogger
 from src.db.models import Base
 
 
-def _factory(tmp_path: Path) -> sessionmaker:
-    engine = create_engine(f"sqlite:///{tmp_path / 'audit.db'}")
+def _factory(engine) -> sessionmaker:
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
@@ -40,24 +38,24 @@ def _record(log: AuditLogger, incident_id: str = "inc-1") -> dict:
     )
 
 
-def test_entry_is_stored_in_database_and_matches_file_entry(tmp_path: Path) -> None:
+def test_entry_is_stored_in_database_and_matches_file_entry(tmp_path: Path, pg_engine) -> None:
     log_path = tmp_path / "audit.jsonl"
-    log = AuditLogger(log_path=log_path, session_factory=_factory(tmp_path))
+    log = AuditLogger(log_path=log_path, session_factory=_factory(pg_engine))
     entry = _record(log)
     assert log_path.exists()
     log_path.unlink()  # prove the next read comes from the database
     assert log.tail() == [entry]
 
 
-def test_tail_is_oldest_first_and_limited(tmp_path: Path) -> None:
-    log = AuditLogger(log_path=tmp_path / "a.jsonl", session_factory=_factory(tmp_path))
+def test_tail_is_oldest_first_and_limited(tmp_path: Path, pg_engine) -> None:
+    log = AuditLogger(log_path=tmp_path / "a.jsonl", session_factory=_factory(pg_engine))
     for i in range(5):
         _record(log, incident_id=f"i{i}")
     assert [e["incident_id"] for e in log.tail(3)] == ["i2", "i3", "i4"]
 
 
-def test_find_filters_by_incident(tmp_path: Path) -> None:
-    log = AuditLogger(log_path=tmp_path / "a.jsonl", session_factory=_factory(tmp_path))
+def test_find_filters_by_incident(tmp_path: Path, pg_engine) -> None:
+    log = AuditLogger(log_path=tmp_path / "a.jsonl", session_factory=_factory(pg_engine))
     _record(log, "a")
     _record(log, "b")
     _record(log, "a")
@@ -72,8 +70,8 @@ def test_database_failure_does_not_break_recording(tmp_path: Path) -> None:
     assert log.find("inc-1") == [entry]
 
 
-def test_empty_database_falls_back_to_file(tmp_path: Path) -> None:
+def test_empty_database_falls_back_to_file(tmp_path: Path, pg_engine) -> None:
     log_path = tmp_path / "a.jsonl"
     entry = _record(AuditLogger(log_path=log_path))
-    reader = AuditLogger(log_path=log_path, session_factory=_factory(tmp_path))
+    reader = AuditLogger(log_path=log_path, session_factory=_factory(pg_engine))
     assert reader.tail() == [entry]

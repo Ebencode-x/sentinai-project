@@ -26,8 +26,11 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
 from src.core.config import settings  # noqa: E402
 from src.db.models import Base  # noqa: E402
 
+# configparser treats % as interpolation, so percent-encoded URLs (a password
+# with @ or # becomes %40 or %23) must be escaped as %% before being stored.
 config.set_main_option(
-    "sqlalchemy.url", config.attributes.get("database_url") or settings.database_url
+    "sqlalchemy.url",
+    (config.attributes.get("database_url") or settings.database_url).replace("%", "%%"),
 )
 target_metadata = Base.metadata
 
