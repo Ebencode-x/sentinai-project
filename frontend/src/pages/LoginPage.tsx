@@ -10,9 +10,9 @@ import { http } from "@/api/client";
 const NO_AUTH_REDIRECT = { skipAuthRedirect: true } as object;
 
 const INPUT =
-  "w-full rounded-md px-3 h-10 text-sm outline-none transition-colors " +
-  "bg-[var(--bg-panel)] border border-[var(--border-strong)] focus:border-[var(--brand)] " +
-  "text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
+  "w-full rounded-md px-3 h-10 text-sm outline-hidden transition-colors " +
+  "bg-(--bg-panel) border border-(--border-strong) focus:border-(--brand) " +
+  "text-(--text-primary) placeholder:text-(--text-muted)";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -55,7 +55,7 @@ export default function LoginPage() {
         <button
           onClick={toggle}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+          className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)"
         >
           <ThemeIcon dark={theme === "dark"} />
         </button>
@@ -122,7 +122,7 @@ export default function LoginPage() {
                   tabIndex={-1}
                   onClick={() => setVisible((v) => !v)}
                   aria-label={visible ? "Hide password" : "Show password"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-secondary)"
                 >
                   {visible ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>

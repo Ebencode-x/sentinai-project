@@ -83,8 +83,8 @@ function checkPolicy(src: string): Issue[] {
 
 const BTN_GHOST =
   "inline-flex items-center gap-2 rounded-md px-3 h-8 text-sm font-medium transition-colors " +
-  "border border-[var(--border-strong)] text-[var(--text-secondary)] " +
-  "hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]";
+  "border border-(--border-strong) text-(--text-secondary) " +
+  "hover:text-(--text-primary) hover:bg-(--bg-hover)";
 
 export default function PolicyEditor() {
   const { toast } = useToast();
@@ -184,7 +184,7 @@ export default function PolicyEditor() {
             spellCheck={false}
             wrap="off"
             aria-label="Policy YAML"
-            className="flex-1 min-w-0 px-4 py-3 outline-none resize-none bg-transparent whitespace-pre overflow-x-auto"
+            className="flex-1 min-w-0 px-4 py-3 outline-hidden resize-none bg-transparent whitespace-pre overflow-x-auto"
             style={{ color: "var(--text-primary)", lineHeight: "24px" }}
           />
         </div>

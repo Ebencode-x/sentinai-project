@@ -159,7 +159,7 @@ export default function IncidentTimeline() {
                     <Fragment key={inc.id}>
                       <tr
                         onClick={() => setOpenId(open ? null : inc.id)}
-                        className="cursor-pointer transition-colors hover:bg-[var(--bg-panel)]"
+                        className="cursor-pointer transition-colors hover:bg-(--bg-panel)"
                         style={{ borderTop: "1px solid var(--border)", background: open ? "var(--bg-panel)" : undefined }}
                       >
                         <td className="pl-3">
@@ -194,7 +194,7 @@ export default function IncidentTimeline() {
                           <td colSpan={5} className="px-4 py-4">
                             <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Details</p>
                             <pre
-                              className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words"
+                              className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap wrap-break-word"
                               style={{
                                 background: "var(--bg-panel)",
                                 border: "1px solid var(--border)",
