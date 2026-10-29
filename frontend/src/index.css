@@ -1,6 +1,173 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-display: Inter Variable, Inter, system-ui, sans-serif;
+  --font-body: Inter Variable, Inter, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-panel: var(--bg-panel);
+  --color-hover: var(--bg-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-hint: var(--text-hint);
+  --color-cyan: var(--cyan);
+  --color-red: var(--red);
+  --color-amber: var(--amber);
+  --color-green: var(--green);
+  --color-purple: var(--purple);
+
+  --color-bg: var(--bg-base);
+  --color-bg-card: var(--bg-surface);
+  --color-bg-border: var(--border);
+
+  --color-accent: var(--cyan);
+  --color-accent-dim: var(--cyan-dim);
+  --color-accent-glow: var(--cyan-glow);
+
+  --color-warn: var(--amber);
+  --color-warn-dim: var(--amber-dim);
+
+  --color-ok: var(--green);
+  --color-ok-dim: var(--green-dim);
+
+  --color-text: var(--text-primary);
+  --color-text-dim: var(--text-secondary);
+
+  --shadow-glow-accent: 0 0 0 1px var(--cyan), 0 0 24px var(--cyan-glow);
+  --shadow-glow-red: 0 0 0 1px var(--red), 0 0 24px var(--red-dim);
+  --shadow-glow-green: 0 0 0 1px var(--green), 0 0 24px var(--green-dim);
+  --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.35);
+
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in: fadeIn 0.25s ease-out both;
+  --animate-slide-up: slideUp 0.3s ease-out both;
+  --animate-pulse-dot: pulseDot 1.4s ease-in-out infinite;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes pulseDot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border);
+  }
+}
+
+@utility font-display {
+  /* Typography */
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+}
+
+@utility font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@utility font-body {
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+}
+
+@utility glow-cyan {
+  /* Glow helpers */
+  box-shadow:
+    0 0 0 1px var(--cyan),
+    0 0 20px var(--cyan-glow);
+}
+
+@utility glow-red {
+  box-shadow:
+    0 0 0 1px var(--red),
+    0 0 20px var(--red-dim);
+}
+
+@utility text-glow {
+  text-shadow: 0 0 18px var(--cyan-glow);
+}
+
+@utility sev-critical {
+  /* Severity colors */
+  color: var(--red);
+}
+
+@utility sev-high {
+  color: var(--amber);
+}
+
+@utility sev-medium {
+  color: var(--purple);
+}
+
+@utility sev-low {
+  color: var(--cyan);
+}
+
+@utility sev-ok {
+  color: var(--green);
+}
+
+@utility animate-fade-in {
+  /* Animations */
+  animation: fadeIn 0.25s ease-out both;
+}
+
+@utility animate-slide-up {
+  animation: slideUp 0.3s ease-out both;
+}
+
+@utility animate-pulse-dot {
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -94,27 +261,6 @@
 }
 
 @layer utilities {
-  /* Typography */
-  .font-display { font-family: "Inter Variable", Inter, system-ui, sans-serif; }
-  .font-mono    { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .font-body    { font-family: "Inter Variable", Inter, system-ui, sans-serif; }
-
-  /* Glow helpers */
-  .glow-cyan   { box-shadow: 0 0 0 1px var(--cyan), 0 0 20px var(--cyan-glow); }
-  .glow-red    { box-shadow: 0 0 0 1px var(--red),  0 0 20px var(--red-dim); }
-  .text-glow   { text-shadow: 0 0 18px var(--cyan-glow); }
-
-  /* Severity colors */
-  .sev-critical { color: var(--red);    }
-  .sev-high     { color: var(--amber);  }
-  .sev-medium   { color: var(--purple); }
-  .sev-low      { color: var(--cyan);   }
-  .sev-ok       { color: var(--green);  }
-
-  /* Animations */
-  .animate-fade-in  { animation: fadeIn  0.25s ease-out both; }
-  .animate-slide-up { animation: slideUp 0.3s  ease-out both; }
-
   @keyframes fadeIn  {
     from { opacity: 0; }
     to   { opacity: 1; }
@@ -127,6 +273,4 @@
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.25; }
   }
-
-  .animate-pulse-dot { animation: pulseDot 1.4s ease-in-out infinite; }
 }

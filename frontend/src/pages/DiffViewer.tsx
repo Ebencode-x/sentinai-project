@@ -174,7 +174,7 @@ export default function DiffViewer() {
                     <button
                       onClick={() => setSelected(s.id)}
                       aria-current={isActive}
-                      className="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--bg-panel)]"
+                      className="w-full text-left px-4 py-3 transition-colors hover:bg-(--bg-panel)"
                       style={{ background: isActive ? "var(--bg-hover)" : undefined }}
                     >
                       <p className="text-sm font-medium line-clamp-2">{s.summary}</p>
@@ -235,7 +235,7 @@ export default function DiffViewer() {
                       This patch is not a unified diff, so it cannot be applied automatically. Shown as written.
                     </p>
                     <pre
-                      className="p-4 text-xs overflow-auto max-h-[560px] whitespace-pre-wrap break-words font-mono"
+                      className="p-4 text-xs overflow-auto max-h-[560px] whitespace-pre-wrap wrap-break-word font-mono"
                       style={{ background: "var(--bg-base)", color: "var(--text-secondary)" }}
                     >
                       {active.proposed_patch}
@@ -248,7 +248,7 @@ export default function DiffViewer() {
                 <div className="px-4 py-3" style={{ borderTop: "1px solid var(--border)" }}>
                   <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Proposed fix</p>
                   <pre
-                    className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words font-mono"
+                    className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap wrap-break-word font-mono"
                     style={{
                       background: "var(--bg-panel)",
                       border: "1px solid var(--border)",

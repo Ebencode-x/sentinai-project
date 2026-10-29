@@ -70,7 +70,7 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="bg-transparent outline-none text-sm w-full"
+        className="bg-transparent outline-hidden text-sm w-full"
         style={{ color: "var(--text-primary)" }}
       />
       {value && (
@@ -86,7 +86,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div className="min-w-0">
       <p className="text-xs mb-0.5" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <div className="text-sm break-words" style={{ color: "var(--text-primary)" }}>{children}</div>
+      <div className="text-sm wrap-break-word" style={{ color: "var(--text-primary)" }}>{children}</div>
     </div>
   );
 }
@@ -325,7 +325,7 @@ function AuditTab() {
                   <Fragment key={e.id}>
                     <tr
                       onClick={() => setOpenId(open ? null : e.id)}
-                      className="cursor-pointer transition-colors hover:bg-[var(--bg-panel)]"
+                      className="cursor-pointer transition-colors hover:bg-(--bg-panel)"
                       style={{ borderTop: "1px solid var(--border)", background: open ? "var(--bg-panel)" : undefined }}
                     >
                       {isAdmin && (
@@ -491,7 +491,7 @@ function SuggestionsTab() {
                   <Fragment key={s.id}>
                     <tr
                       onClick={() => setOpenId(open ? null : s.id)}
-                      className="cursor-pointer transition-colors hover:bg-[var(--bg-panel)]"
+                      className="cursor-pointer transition-colors hover:bg-(--bg-panel)"
                       style={{ borderTop: "1px solid var(--border)", background: open ? "var(--bg-panel)" : undefined }}
                     >
                       <td className="pl-3">

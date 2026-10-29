@@ -20,14 +20,14 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 const INPUT =
-  "w-full rounded-md px-3 h-9 text-sm outline-none transition-colors " +
-  "bg-[var(--bg-panel)] border border-[var(--border)] focus:border-[var(--brand)] " +
-  "text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
+  "w-full rounded-md px-3 h-9 text-sm outline-hidden transition-colors " +
+  "bg-(--bg-panel) border border-(--border) focus:border-(--brand) " +
+  "text-(--text-primary) placeholder:text-(--text-muted)";
 
 const BTN_GHOST =
   "inline-flex items-center gap-2 rounded-md px-3 h-8 text-sm font-medium transition-colors " +
-  "border border-[var(--border-strong)] text-[var(--text-secondary)] " +
-  "hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-50";
+  "border border-(--border-strong) text-(--text-secondary) " +
+  "hover:text-(--text-primary) hover:bg-(--bg-hover) disabled:opacity-50";
 
 /* Small building blocks */
 
@@ -350,7 +350,7 @@ function ChannelsCard({ isAdmin }: { isAdmin: boolean }) {
                 onClick={() => remove(ch.id, ch.name)}
                 disabled={!isAdmin}
                 aria-label={`Delete ${ch.name}`}
-                className="w-8 h-8 rounded-md flex items-center justify-center transition-colors disabled:opacity-40 hover:bg-[var(--red-dim)] hover:text-[var(--red)]"
+                className="w-8 h-8 rounded-md flex items-center justify-center transition-colors disabled:opacity-40 hover:bg-(--red-dim) hover:text-(--red)"
                 style={{ color: "var(--text-muted)" }}
               >
                 <Trash2 size={15} />
@@ -392,7 +392,7 @@ function ChannelsCard({ isAdmin }: { isAdmin: boolean }) {
                       type="checkbox"
                       checked={severities.includes(s)}
                       onChange={() => toggleSeverity(s)}
-                      className="accent-[var(--brand)]"
+                      className="accent-(--brand)"
                     />
                     {s}
                   </label>

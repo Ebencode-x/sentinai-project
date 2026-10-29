@@ -57,8 +57,8 @@ export default function Layout() {
                   clsx(
                     "px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors",
                     isActive
-                      ? "bg-[var(--bg-hover)] text-[var(--text-primary)]"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-panel)]"
+                      ? "bg-(--bg-hover) text-(--text-primary)"
+                      : "text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-panel)"
                   )
                 }
               >
@@ -71,7 +71,7 @@ export default function Layout() {
             <button
               onClick={toggle}
               title={theme === "dark" ? "Light mode" : "Dark mode"}
-              className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)"
             >
               <ThemeIcon dark={theme === "dark"} />
             </button>
@@ -88,7 +88,7 @@ export default function Layout() {
             <button
               onClick={handleLogout}
               title="Sign out"
-              className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--red)] hover:bg-[var(--red-dim)]"
+              className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-(--text-secondary) hover:text-(--red) hover:bg-(--red-dim)"
             >
               <LogOut size={16} />
             </button>

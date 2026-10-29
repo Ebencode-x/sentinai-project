@@ -160,7 +160,7 @@ export default function ChatPanel() {
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className="max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words"
+                  className="max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap wrap-break-word"
                   style={
                     m.role === "user"
                       ? { background: "var(--brand)", color: "#1a1a1a" }
@@ -197,7 +197,7 @@ export default function ChatPanel() {
               disabled={loading}
               rows={1}
               aria-label="Message"
-              className="flex-1 resize-none rounded-md px-3 py-2 text-sm outline-none transition-colors max-h-28 bg-[var(--bg-panel)] border border-[var(--border)] focus:border-[var(--brand)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-60"
+              className="flex-1 resize-none rounded-md px-3 py-2 text-sm outline-hidden transition-colors max-h-28 bg-(--bg-panel) border border-(--border) focus:border-(--brand) text-(--text-primary) placeholder:text-(--text-muted) disabled:opacity-60"
             />
             <button
               onClick={() => void send()}

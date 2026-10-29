@@ -71,7 +71,7 @@ export default function IncidentsTable({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search incidents"
-            className="bg-transparent outline-none text-sm w-full"
+            className="bg-transparent outline-hidden text-sm w-full"
             style={{ color: "var(--text-primary)" }}
           />
         </div>
@@ -103,7 +103,7 @@ export default function IncidentsTable({
                 <tr
                   key={i.id}
                   onClick={() => navigate("/incidents")}
-                  className="cursor-pointer transition-colors hover:bg-[var(--bg-panel)]"
+                  className="cursor-pointer transition-colors hover:bg-(--bg-panel)"
                   style={{ borderTop: "1px solid var(--border)" }}
                 >
                   <td className="px-4 py-3">
