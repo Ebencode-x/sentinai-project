@@ -14,11 +14,27 @@ jobs:
     name: "[ TEST ] pytest + coverage"
     runs-on: ubuntu-24.04
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sentinai
+          POSTGRES_PASSWORD: sentinai
+          POSTGRES_DB: sentinai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentinai -d sentinai_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       GITHUB_TOKEN_SENTINAI: ${{ secrets.GITHUB_TOKEN_SENTINAI }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      DATABASE_URL: postgresql+psycopg2://sentinai:sentinai@localhost:5432/sentinai_test
 
     steps:
       - name: Checkout repository
