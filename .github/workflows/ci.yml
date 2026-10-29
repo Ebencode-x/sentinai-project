@@ -10,9 +10,24 @@ jobs:
   # ─────────────────────────────────────────────
   # STAGE 1 — Quality Gate (Tests + Coverage)
   # ─────────────────────────────────────────────
-  test:
+ test:
     name: "[ TEST ] pytest + coverage"
     runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sentinai
+          POSTGRES_PASSWORD: sentinai
+          POSTGRES_DB: sentinai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentinai -d sentinai_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
       GITHUB_TOKEN_SENTINAI: ${{ secrets.GITHUB_TOKEN_SENTINAI }}
