@@ -17,7 +17,18 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -111,3 +122,108 @@ class AuditEvent(Base):
         DateTime(timezone=True), default=None, index=True
     )
     archived_by: Mapped[str | None] = mapped_column(String(255), default=None)
+
+
+class Incident(Base):
+    """One group of identical errors, stored once per account.
+
+    The fingerprint is unique per account, so a repeat of the same error raises
+    occurrence_count and last_seen_at instead of adding another row.
+    """
+
+    __tablename__ = "incidents"
+    __table_args__ = (
+        UniqueConstraint("account_id", "fingerprint", name="uq_incidents_account_fingerprint"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(255))
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1)
+    severity: Mapped[str] = mapped_column(String(20), default="critical")
+    trigger_line: Mapped[str] = mapped_column(Text)
+    stacktrace: Mapped[str] = mapped_column(Text, default="")
+    context_before_error: Mapped[str] = mapped_column(Text, default="")
+
+
+class Suggestion(Base):
+    """An AI remediation suggestion, always tied to the incident it was made for."""
+
+    __tablename__ = "suggestions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    incident_pk: Mapped[str] = mapped_column(
+        ForeignKey("incidents.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    proposed_code_fix: Mapped[str] = mapped_column(Text)
+    proposed_config_change: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float)
+    risks: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(20), default="stub")
+    provider_error: Mapped[str | None] = mapped_column(Text, default=None)
+    model: Mapped[str | None] = mapped_column(String(255), default=None)
+    proposed_patch: Mapped[str | None] = mapped_column(Text, default=None)
+    test_guidance: Mapped[str | None] = mapped_column(Text, default=None)
+    pr_url: Mapped[str | None] = mapped_column(Text, default=None)
+    pr_number: Mapped[int | None] = mapped_column(Integer, default=None)
+    patch_file: Mapped[str | None] = mapped_column(String(1024), default=None)
+    before_sha: Mapped[str | None] = mapped_column(String(100), default=None)
+    branch_name: Mapped[str | None] = mapped_column(String(255), default=None)
+    autonomy_mode: Mapped[str | None] = mapped_column(String(50), default=None)
+    awaiting_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class RollbackEntry(Base):
+    """One auto-patch PR SentinAI opened, with what is needed to revert it."""
+
+    __tablename__ = "rollback_ledger"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(255), index=True)
+    pr_number: Mapped[int] = mapped_column(Integer)
+    pr_url: Mapped[str | None] = mapped_column(Text, default=None)
+    branch_name: Mapped[str | None] = mapped_column(String(255), default=None)
+    patch_file: Mapped[str] = mapped_column(String(1024))
+    before_sha: Mapped[str] = mapped_column(String(100))
+    after_sha: Mapped[str | None] = mapped_column(String(100), default=None)
+    merge_commit_sha: Mapped[str | None] = mapped_column(String(100), default=None)
+    rollback_current_sha: Mapped[str | None] = mapped_column(String(100), default=None)
+    revert_commit_sha: Mapped[str | None] = mapped_column(String(100), default=None)
+    status: Mapped[str] = mapped_column(String(30), default="proposed", index=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class AccountSettings(Base):
+    """Per-account settings that must survive a redeploy."""
+
+    __tablename__ = "account_settings"
+
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    autonomy_mode: Mapped[str] = mapped_column(String(50), default="propose_only")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(255), default=None)
+
+
+class NotificationChannel(Base):
+    """A Slack or webhook destination. The URL is a secret, so it is stored encrypted."""
+
+    __tablename__ = "notification_channels"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    type: Mapped[str] = mapped_column(String(20))
+    url_encrypted: Mapped[str] = mapped_column(Text)
+    severities: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"), default=list
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
