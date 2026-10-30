@@ -110,7 +110,9 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("type", sa.String(length=20), nullable=False),
         sa.Column("url_encrypted", sa.Text(), nullable=False),
-        sa.Column("severities", sa.JSON().with_variant(postgresql.JSONB(), "postgresql"), nullable=False),
+        sa.Column(
+            "severities", sa.JSON().with_variant(postgresql.JSONB(), "postgresql"), nullable=False
+        ),
         sa.Column("enabled", sa.Boolean(), nullable=False),
         sa.Column("created_at", _TZ, nullable=False),
     )

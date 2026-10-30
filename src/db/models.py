@@ -158,9 +158,7 @@ class Suggestion(Base):
     incident_pk: Mapped[str] = mapped_column(
         ForeignKey("incidents.id", ondelete="CASCADE"), index=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
     summary: Mapped[str] = mapped_column(Text)
     proposed_code_fix: Mapped[str] = mapped_column(Text)
     proposed_config_change: Mapped[str] = mapped_column(Text)
@@ -198,9 +196,7 @@ class RollbackEntry(Base):
     rollback_current_sha: Mapped[str | None] = mapped_column(String(100), default=None)
     revert_commit_sha: Mapped[str | None] = mapped_column(String(100), default=None)
     status: Mapped[str] = mapped_column(String(30), default="proposed", index=True)
-    opened_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, index=True
-    )
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
 class AccountSettings(Base):
