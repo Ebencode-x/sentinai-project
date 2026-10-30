@@ -120,7 +120,7 @@ async def chat(
 
     if not question.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty question.")
-    incidents = [inc.model_dump(mode="json") for inc in app_state.recent_incidents]
+    incidents = [inc.model_dump(mode="json") for inc in app_state.incidents()]
     stats = app_state.stats_snapshot()
     system = _build_system_prompt(incidents, stats)
     logger.info("[chat] user=%s q_len=%d", user.email, len(question))

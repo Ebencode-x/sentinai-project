@@ -91,92 +91,91 @@ class TestPrometheusMetrics:
         assert isinstance(client.get("/metrics").text, str)
 
 
+@pytest.fixture
+def seeded(monkeypatch, app_db):
+    """Point the shared app_state at a throwaway migrated schema with one account."""
+    from src.core.state import app_state
+
+    factory, account_id = app_db
+    monkeypatch.setattr(app_state, "session_factory", factory)
+    monkeypatch.setattr(app_state, "_account_id", account_id)
+    return factory, account_id
+
+
+def _store_incident(seeded, incident_id: str):
+    from src.db import repository
+
+    factory, account_id = seeded
+    with factory() as db:
+        return repository.insert_incident_if_new(db, account_id, make_incident(incident_id))
+
+
+def _store_suggestion(seeded, summary: str = "A fix") -> None:
+    from src.db import repository
+
+    factory, account_id = seeded
+    incident_pk = _store_incident(seeded, "for-" + summary.replace(" ", "-"))
+    with factory() as db:
+        repository.add_suggestion(db, account_id, incident_pk, make_suggestion(summary))
+
+
 class TestIncidents:
-    def test_returns_200(self, client):
+    def test_returns_200(self, client, seeded):
         assert client.get("/incidents").status_code == 200
 
-    def test_returns_list(self, client):
+    def test_returns_list(self, client, seeded):
         assert isinstance(client.get("/incidents").json(), list)
 
-    def test_incident_appears_in_response(self, client):
-        from src.core.state import app_state
-
-        inc = make_incident("route-test-001")
-        app_state.recent_incidents.append(inc)
+    def test_incident_appears_in_response(self, client, seeded):
+        _store_incident(seeded, "route-test-001")
         ids = [i["id"] for i in client.get("/incidents").json()]
         assert "route-test-001" in ids
-        app_state.recent_incidents.remove(inc)
 
-    def test_incident_fields_present(self, client):
-        from src.core.state import app_state
-
-        inc = make_incident("field-check-002")
-        app_state.recent_incidents.append(inc)
+    def test_incident_fields_present(self, client, seeded):
+        _store_incident(seeded, "field-check-002")
         data = client.get("/incidents").json()
         match = next(i for i in data if i["id"] == "field-check-002")
         assert "title" in match
         assert "severity" in match
-        app_state.recent_incidents.remove(inc)
 
 
 class TestSuggestions:
-    def test_returns_200(self, client):
+    def test_returns_200(self, client, seeded):
         assert client.get("/suggestions").status_code == 200
 
-    def test_returns_list(self, client):
+    def test_returns_list(self, client, seeded):
         assert isinstance(client.get("/suggestions").json(), list)
 
-    def test_suggestion_appears_in_response(self, client):
-        from src.core.state import app_state
-
-        s = make_suggestion("My specific fix")
-        app_state.recent_suggestions.append(s)
-        data = client.get("/suggestions").json()
-        summaries = [i["summary"] for i in data]
+    def test_suggestion_appears_in_response(self, client, seeded):
+        _store_suggestion(seeded, "My specific fix")
+        summaries = [i["summary"] for i in client.get("/suggestions").json()]
         assert "My specific fix" in summaries
-        app_state.recent_suggestions.remove(s)
 
-    def test_suggestion_fields_present(self, client):
-        from src.core.state import app_state
-
-        s = make_suggestion()
-        app_state.recent_suggestions.append(s)
+    def test_suggestion_fields_present(self, client, seeded):
+        _store_suggestion(seeded)
         last = client.get("/suggestions").json()[-1]
         assert "summary" in last
         assert "confidence" in last
         assert "source" in last
-        app_state.recent_suggestions.remove(s)
 
 
 class TestSuggestionsLatest:
-    def test_404_when_empty(self, client):
-        from src.core.state import app_state
-
-        app_state.recent_suggestions.clear()
+    def test_404_when_empty(self, client, seeded):
         assert client.get("/suggestions/latest").status_code == 404
 
-    def test_404_detail_message(self, client):
-        from src.core.state import app_state
-
-        app_state.recent_suggestions.clear()
+    def test_404_detail_message(self, client, seeded):
         data = client.get("/suggestions/latest").json()
         assert "No suggestions yet" in data["detail"]
 
-    def test_200_when_suggestions_exist(self, client):
-        from src.core.state import app_state
-
-        app_state.recent_suggestions.append(make_suggestion())
+    def test_200_when_suggestions_exist(self, client, seeded):
+        _store_suggestion(seeded)
         assert client.get("/suggestions/latest").status_code == 200
-        app_state.recent_suggestions.clear()
 
-    def test_returns_last_suggestion(self, client):
-        from src.core.state import app_state
-
-        app_state.recent_suggestions.append(make_suggestion("First"))
-        app_state.recent_suggestions.append(make_suggestion("Second"))
+    def test_returns_last_suggestion(self, client, seeded):
+        _store_suggestion(seeded, "First")
+        _store_suggestion(seeded, "Second")
         data = client.get("/suggestions/latest").json()
         assert data["summary"] == "Second"
-        app_state.recent_suggestions.clear()
 
 
 class TestScanNow:

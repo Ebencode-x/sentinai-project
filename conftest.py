@@ -45,3 +45,23 @@ def pg_engine(pg_url):
     engine = create_engine(pg_url)
     yield engine
     engine.dispose()
+
+
+@pytest.fixture
+def app_db(pg_url):
+    """A migrated throwaway schema holding one account. Yields (session_factory, account_id)."""
+    from sqlalchemy.orm import sessionmaker
+
+    from src.db.migrate import run_migrations
+    from src.db.models import Account
+
+    run_migrations(pg_url)
+    engine = create_engine(pg_url)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory() as db:
+        account = Account(name="test account")
+        db.add(account)
+        db.commit()
+        account_id = account.id
+    yield factory, account_id
+    engine.dispose()

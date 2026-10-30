@@ -25,6 +25,11 @@ def fresh_db(pg_url, monkeypatch):
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     monkeypatch.delenv("SENTINAI_ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("SENTINAI_ADMIN_PASSWORD", raising=False)
+    # The API reads incidents through app_state, so it must use this database too.
+    from src.core.state import app_state
+
+    monkeypatch.setattr(app_state, "session_factory", factory)
+    monkeypatch.setattr(app_state, "_account_id", None)
     yield factory
     engine.dispose()
 

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from src.core.audit import AuditLogger, audit_logger
+from src.core.audit import AuditLogger, SessionFactory, audit_logger
 from src.core.config import settings
 from src.core.metrics import metrics
+from src.db import repository
+from src.db.session import SessionLocal
 from src.integrations.notifier import notify
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.remediation_engine import RemediationEngine
@@ -29,13 +30,9 @@ class AppState:
         )
     )
     remediation_engine: RemediationEngine = field(default_factory=RemediationEngine)
-    recent_incidents: deque[LogIncident] = field(
-        default_factory=lambda: deque(maxlen=settings.max_recent_incidents)
-    )
-    recent_suggestions: deque[RemediationSuggestion] = field(
-        default_factory=lambda: deque(maxlen=settings.max_recent_incidents)
-    )
-    _incident_dedupe: OrderedDict[str, None] = field(default_factory=OrderedDict)
+    session_factory: SessionFactory = field(default_factory=lambda: SessionLocal)
+    persistence_errors: int = 0
+    _account_id: str | None = None
     _scan_lock: threading.Lock = field(default_factory=threading.Lock)
     autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
     notification_channels: list[dict] = field(default_factory=list)
@@ -53,19 +50,15 @@ class AppState:
         incidents = self.watcher.scan_once()
         added = 0
         for incident in incidents:
-            if incident.incident_id in self._incident_dedupe:
+            outcome, account_id, incident_pk = self._store_incident(incident)
+            if outcome == "repeat":
                 continue
-            self._incident_dedupe[incident.incident_id] = None
-            max_window = max(1, settings.incident_dedupe_window)
-            while len(self._incident_dedupe) > max_window:
-                self._incident_dedupe.popitem(last=False)
 
-            self.recent_incidents.append(incident)
-            self._save_incidents()
             suggestion = self.remediation_engine.suggest_fix(
                 incident, autonomy_mode=self.autonomy_mode
             )
-            self.recent_suggestions.append(suggestion)
+            if account_id and incident_pk:
+                self._store_suggestion(account_id, incident_pk, suggestion)
             self._record_audit(incident, suggestion)
 
             if suggestion.pr_number and suggestion.patch_file and suggestion.before_sha:
@@ -110,72 +103,102 @@ class AppState:
         except Exception:
             logger.exception("Audit record failed for incident %s", incident.incident_id)
 
-    def stats_snapshot(self) -> dict:
-        """Lightweight runtime metrics for demos and observability export.
+    def _resolve_account_id(self, db) -> str | None:
+        """Find, and remember, the account this deployment stores its data under."""
+        if self._account_id is None:
+            self._account_id = repository.default_account_id(db)
+        return self._account_id
 
-        Acquires _scan_lock to ensure a consistent view of shared state
-        while scan_logs_once() may be running concurrently.
+    def _store_incident(self, incident: LogIncident) -> tuple[str, str | None, str | None]:
+        """Save an incident. Returns (outcome, account_id, incident_pk).
+
+        The outcome is "new", "repeat" (already known, only counted) or "unstored"
+        when the database could not be used. An unstored incident is still analysed
+        and notified, so a database problem never silences an alert.
         """
-        with self._scan_lock:
-            by_source: dict[str, int] = {"stub": 0, "provider": 0, "fallback": 0}
-            for suggestion in self.recent_suggestions:
-                key = suggestion.source
-                if key in by_source:
-                    by_source[key] += 1
-
-            return {
-                "service": "sentinai",
-                "log_file_path": settings.log_file_path,
-                "llm_provider": settings.llm_provider,
-                "buffer_incident_count": len(self.recent_incidents),
-                "buffer_suggestion_count": len(self.recent_suggestions),
-                "dedupe_fingerprints_tracked": len(self._incident_dedupe),
-                "dedupe_window_max": settings.incident_dedupe_window,
-                "total_scan_runs": self.total_scan_runs,
-                "last_scan_at_utc": self.last_scan_at_utc.isoformat()
-                if self.last_scan_at_utc
-                else None,
-                "last_scan_new_incidents": self.last_scan_new_incidents,
-                "recent_suggestions_by_source": by_source,
-                "llm_metrics": metrics.snapshot(),
-            }
-
-    def _incidents_cache_path(self):
-        import pathlib
-
-        p = pathlib.Path(self.watcher.config.log_file_path).parent / "incidents.json"
-        return p
-
-    def _save_incidents(self):
-        import json
-
         try:
-            data = [inc.model_dump(mode="json") for inc in self.recent_incidents]
-            self._incidents_cache_path().write_text(json.dumps(data, default=str))
-        except Exception as e:
-            logger.warning("[state] Failed to save incidents: %s", e)
+            with self.session_factory() as db:
+                account_id = self._resolve_account_id(db)
+                if account_id is None:
+                    raise RuntimeError("no account exists yet")
+                incident_pk = repository.insert_incident_if_new(db, account_id, incident)
+        except Exception:
+            self.persistence_errors += 1
+            logger.exception("[state] Could not store incident %s", incident.incident_id)
+            return "unstored", None, None
+        return ("new" if incident_pk else "repeat"), account_id, incident_pk
 
-    def load_incidents(self):
-        import json
-
-        from src.models.events import LogIncident
-
-        p = self._incidents_cache_path()
-        if not p.exists():
-            return
+    def _store_suggestion(
+        self, account_id: str, incident_pk: str, suggestion: RemediationSuggestion
+    ) -> None:
         try:
-            data = json.loads(p.read_text())
-            for d in data:
-                try:
-                    inc = LogIncident(**d)
-                    if inc.incident_id not in self._incident_dedupe:
-                        self._incident_dedupe[inc.incident_id] = None
-                        self.recent_incidents.append(inc)
-                except Exception:
-                    pass
-            logger.info("[state] Loaded %d incidents from cache", len(self.recent_incidents))
-        except Exception as e:
-            logger.warning("[state] Failed to load incidents: %s", e)
+            with self.session_factory() as db:
+                repository.add_suggestion(db, account_id, incident_pk, suggestion)
+        except Exception:
+            self.persistence_errors += 1
+            logger.exception("[state] Could not store suggestion %s", suggestion.id)
+
+    def incidents(self) -> list[LogIncident]:
+        """The latest incidents, oldest first."""
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return []
+            return repository.list_incidents(db, account_id, settings.max_recent_incidents)
+
+    def suggestions(self) -> list[RemediationSuggestion]:
+        """The latest suggestions, oldest first."""
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return []
+            return repository.list_suggestions(db, account_id, settings.max_recent_incidents)
+
+    def latest_suggestion(self) -> RemediationSuggestion | None:
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return None
+            return repository.latest_suggestion(db, account_id)
+
+    def stats_snapshot(self) -> dict:
+        """Lightweight runtime metrics for demos and observability export."""
+        by_source: dict[str, int] = {"stub": 0, "provider": 0, "fallback": 0}
+        incident_count = 0
+        suggestion_count = 0
+        reachable = True
+        try:
+            with self.session_factory() as db:
+                account_id = self._resolve_account_id(db)
+                if account_id is not None:
+                    found = repository.counts(db, account_id)
+                    incident_count = found["incidents"]
+                    suggestion_count = found["suggestions"]
+                    for key, total in found["by_source"].items():
+                        if key in by_source:
+                            by_source[key] = total
+        except Exception:
+            reachable = False
+            logger.warning("[state] Stats could not read the database", exc_info=True)
+
+        return {
+            "service": "sentinai",
+            "log_file_path": settings.log_file_path,
+            "llm_provider": settings.llm_provider,
+            "buffer_incident_count": incident_count,
+            "buffer_suggestion_count": suggestion_count,
+            "dedupe_fingerprints_tracked": incident_count,
+            "dedupe_window_max": settings.incident_dedupe_window,
+            "total_scan_runs": self.total_scan_runs,
+            "last_scan_at_utc": self.last_scan_at_utc.isoformat()
+            if self.last_scan_at_utc
+            else None,
+            "last_scan_new_incidents": self.last_scan_new_incidents,
+            "recent_suggestions_by_source": by_source,
+            "persistence_errors": self.persistence_errors,
+            "database_reachable": reachable,
+            "llm_metrics": metrics.snapshot(),
+        }
 
     def _settings_cache_path(self):
         import pathlib
