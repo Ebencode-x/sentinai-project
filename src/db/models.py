@@ -6,9 +6,9 @@ Design notes (see docs/account-model-design.md):
 - Role is a flat enum: admin | viewer. No fine-grained permissions.
 - Session tokens are opaque, stored server-side, and revocable immediately
   (deleting the row logs the user out) — chosen over JWT for that reason.
-- Incidents/suggestions/settings are NOT modeled here — they stay in
-  AppState's existing deque + JSON-file-cache mechanism (see
-  src/core/state.py). This module only owns auth.
+- Incidents and suggestions are stored here (Incident, Suggestion). Settings,
+  notification channels and the rollback ledger have tables too, but still run
+  from AppState's JSON files until they are switched over.
 """
 
 from __future__ import annotations

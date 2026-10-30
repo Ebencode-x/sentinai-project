@@ -105,7 +105,7 @@ def prometheus_metrics() -> PlainTextResponse:
 @router.get("/incidents", dependencies=_PROTECTED, tags=["incidents"])
 def incidents() -> list[dict]:
     out = []
-    for inc in app_state.recent_incidents:
+    for inc in app_state.incidents():
         tl = inc.trigger_line or ""
         if tl.startswith("Traceback"):
             continue
@@ -125,17 +125,18 @@ def incidents() -> list[dict]:
 
 @router.get("/suggestions", dependencies=_PROTECTED, tags=["incidents"])
 def suggestions() -> list[dict]:
-    return [item.model_dump(mode="json") for item in app_state.recent_suggestions]
+    return [item.model_dump(mode="json") for item in app_state.suggestions()]
 
 
 @router.get("/suggestions/latest", dependencies=_PROTECTED, tags=["incidents"])
 def suggestions_latest() -> dict:
-    if not app_state.recent_suggestions:
+    latest = app_state.latest_suggestion()
+    if latest is None:
         raise HTTPException(
             status_code=404,
             detail="No suggestions yet. Run POST /scan-now after errors appear in logs.",
         )
-    return app_state.recent_suggestions[-1].model_dump(mode="json")
+    return latest.model_dump(mode="json")
 
 
 @router.post("/scan-now", dependencies=_ADMIN_ONLY, tags=["incidents"])
