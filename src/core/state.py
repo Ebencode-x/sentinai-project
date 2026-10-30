@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from src.core.audit import AuditLogger, SessionFactory, audit_logger
 from src.core.config import settings
+from src.core.crypto import KEY_ENV, MASK_MARK, SecretKeyError, decrypt, encrypt, mask_url
 from src.core.metrics import metrics
 from src.db import repository
 from src.db.session import SessionLocal
@@ -18,6 +19,8 @@ from src.services.remediation_engine import RemediationEngine
 from src.services.watcher import LogWatcher, WatcherConfig
 
 logger = logging.getLogger(__name__)
+
+AUTONOMY_MODES = ("propose_only", "auto_pr")
 
 
 @dataclass
@@ -35,7 +38,6 @@ class AppState:
     _account_id: str | None = None
     _scan_lock: threading.Lock = field(default_factory=threading.Lock)
     autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
-    notification_channels: list[dict] = field(default_factory=list)
     rollback_ledger: list[dict] = field(default_factory=list)
     audit: AuditLogger = field(default_factory=lambda: audit_logger)
     total_scan_runs: int = 0
@@ -55,7 +57,7 @@ class AppState:
                 continue
 
             suggestion = self.remediation_engine.suggest_fix(
-                incident, autonomy_mode=self.autonomy_mode
+                incident, autonomy_mode=self.current_autonomy_mode()
             )
             if account_id and incident_pk:
                 self._store_suggestion(account_id, incident_pk, suggestion)
@@ -72,7 +74,7 @@ class AppState:
                 )
 
             # Milestone 3: fire Slack + webhook notifications
-            notify(incident, suggestion, channels=self.notification_channels)
+            notify(incident, suggestion, channels=self.delivery_channels())
 
             added += 1
 
@@ -203,42 +205,58 @@ class AppState:
     def _settings_cache_path(self):
         import pathlib
 
-        p = pathlib.Path(self.watcher.config.log_file_path).parent / "settings.json"
-        return p
+        return pathlib.Path(self.watcher.config.log_file_path).parent / "settings.json"
 
-    def _save_settings(self):
-        import json
-
+    def load_settings(self) -> None:
+        """Read settings from the database and import a leftover settings.json once."""
         try:
-            self._settings_cache_path().write_text(
-                json.dumps(
-                    {
-                        "autonomy_mode": self.autonomy_mode,
-                        "notification_channels": self.notification_channels,
-                    }
-                )
-            )
-        except Exception as e:
-            logger.warning("[state] Failed to save settings: %s", e)
+            self.current_autonomy_mode()
+            self._import_legacy_settings()
+        except Exception:
+            logger.warning("[state] Failed to load settings", exc_info=True)
 
-    def load_settings(self):
+    def _import_legacy_settings(self) -> None:
+        """Move an old settings.json into the database, then delete it (it holds secrets)."""
         import json
 
-        p = self._settings_cache_path()
-        if not p.exists():
+        path = self._settings_cache_path()
+        if not path.exists():
             return
-        try:
-            data = json.loads(p.read_text())
-            mode = data.get("autonomy_mode")
-            if mode in ("propose_only", "auto_pr"):
-                self.autonomy_mode = mode
-                logger.info("[state] Loaded autonomy_mode=%s from cache", mode)
-            channels = data.get("notification_channels")
-            if isinstance(channels, list):
-                self.notification_channels = channels
-                logger.info("[state] Loaded %d notification channel(s) from cache", len(channels))
-        except Exception as e:
-            logger.warning("[state] Failed to load settings: %s", e)
+        data = json.loads(path.read_text())
+        found = data.get("notification_channels")
+        legacy = [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
+        if legacy:
+            try:
+                encrypt("probe")
+            except SecretKeyError:
+                logger.warning(
+                    "[state] settings.json holds channels but %s is not set; leaving it in place",
+                    KEY_ENV,
+                )
+                return
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            if repository.get_autonomy_mode(db, account_id) is None:
+                mode = data.get("autonomy_mode")
+                if mode in AUTONOMY_MODES:
+                    repository.set_autonomy_mode(db, account_id, mode, "settings.json import")
+            known = {row.name for row in repository.list_channels(db, account_id)}
+            for channel in legacy:
+                if channel.get("name") in known or not channel.get("url"):
+                    continue
+                if channel.get("type") not in ("slack", "webhook"):
+                    continue
+                repository.add_channel(
+                    db,
+                    account_id,
+                    name=channel["name"],
+                    type_=channel["type"],
+                    url_encrypted=encrypt(channel["url"]),
+                    severities=list(channel.get("severities", [])),
+                    enabled=bool(channel.get("enabled", True)),
+                )
+        path.unlink()
+        logger.info("[state] Imported settings.json into the database and removed the file")
 
     def _rollback_ledger_cache_path(self):
         import pathlib
@@ -378,46 +396,121 @@ class AppState:
         self._save_rollback_ledger()
         return {"ledger_id": ledger_id, "status": "rolled_back", "revert_commit_sha": new_sha}
 
+    def _require_account_id(self, db) -> str:
+        account_id = self._resolve_account_id(db)
+        if account_id is None:
+            raise RuntimeError("No account exists yet.")
+        return account_id
+
+    def current_autonomy_mode(self) -> str:
+        """The mode stored for the account, or the last known one if the database fails.
+
+        A failed read is logged but not counted in persistence_errors, which tracks
+        incidents and suggestions that could not be saved.
+        """
+        try:
+            with self.session_factory() as db:
+                account_id = self._resolve_account_id(db)
+                stored = repository.get_autonomy_mode(db, account_id) if account_id else None
+            if stored in AUTONOMY_MODES:
+                self.autonomy_mode = stored
+        except Exception:
+            logger.warning(
+                "[state] Could not read autonomy_mode, using %s", self.autonomy_mode, exc_info=True
+            )
+        return self.autonomy_mode
+
     def set_autonomy_mode(self, mode: str) -> None:
-        if mode not in ("propose_only", "auto_pr"):
+        if mode not in AUTONOMY_MODES:
             raise ValueError(f"Invalid autonomy_mode: {mode}")
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            repository.set_autonomy_mode(db, account_id, mode)
         self.autonomy_mode = mode
-        self._save_settings()
+
+    @staticmethod
+    def _channel_view(row, url: str) -> dict:
+        return {
+            "id": row.id,
+            "name": row.name,
+            "type": row.type,
+            "url": url,
+            "severities": list(row.severities or []),
+            "enabled": row.enabled,
+        }
+
+    @staticmethod
+    def _masked_url(row) -> str:
+        try:
+            return mask_url(decrypt(row.url_encrypted))
+        except SecretKeyError:
+            return "(encrypted)"
+
+    def channels(self) -> list[dict]:
+        """Channels for the API. URLs are masked, so a secret never leaves the server."""
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return []
+            rows = repository.list_channels(db, account_id)
+            return [self._channel_view(row, self._masked_url(row)) for row in rows]
+
+    def delivery_channels(self) -> list[dict]:
+        """Channels with their real URLs, used only to send notifications. Never raises."""
+        try:
+            with self.session_factory() as db:
+                account_id = self._resolve_account_id(db)
+                if account_id is None:
+                    return []
+                found = []
+                for row in repository.list_channels(db, account_id):
+                    try:
+                        found.append(self._channel_view(row, decrypt(row.url_encrypted)))
+                    except SecretKeyError:
+                        logger.warning(
+                            "[state] Skipping channel %s: cannot decrypt its URL", row.name
+                        )
+                return found
+        except Exception:
+            logger.warning("[state] Could not load notification channels", exc_info=True)
+            return []
 
     def add_channel(self, data: dict) -> dict:
-        import uuid
-
-        channel = {
-            "id": str(uuid.uuid4()),
-            "name": data["name"],
-            "type": data["type"],
-            "url": data["url"],
-            "severities": data["severities"],
-            "enabled": data.get("enabled", True),
-        }
-        self.notification_channels.append(channel)
-        self._save_settings()
-        return channel
+        token = encrypt(data["url"])  # raises SecretKeyError before the database is touched
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            row = repository.add_channel(
+                db,
+                account_id,
+                name=data["name"],
+                type_=data["type"],
+                url_encrypted=token,
+                severities=list(data["severities"]),
+                enabled=data.get("enabled", True),
+            )
+            return self._channel_view(row, mask_url(data["url"]))
 
     def update_channel(self, channel_id: str, updates: dict) -> dict | None:
-        for ch in self.notification_channels:
-            if ch["id"] == channel_id:
-                for key in ("name", "url", "severities", "enabled"):
-                    if key in updates and updates[key] is not None:
-                        ch[key] = updates[key]
-                self._save_settings()
-                return ch
-        return None
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            row = repository.get_channel(db, account_id, channel_id)
+            if row is None:
+                return None
+            for key in ("name", "severities", "enabled"):
+                value = updates.get(key)
+                if value is not None:
+                    setattr(row, key, list(value) if key == "severities" else value)
+            new_url = updates.get("url")
+            # A masked URL sent back by a client must never replace the real one.
+            if new_url is not None and MASK_MARK not in new_url:
+                row.url_encrypted = encrypt(new_url)
+            db.commit()
+            return self._channel_view(row, self._masked_url(row))
 
     def delete_channel(self, channel_id: str) -> bool:
-        before = len(self.notification_channels)
-        self.notification_channels = [
-            c for c in self.notification_channels if c["id"] != channel_id
-        ]
-        if len(self.notification_channels) != before:
-            self._save_settings()
-            return True
-        return False
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            return repository.delete_channel(db, account_id, channel_id)
 
 
 app_state = AppState()

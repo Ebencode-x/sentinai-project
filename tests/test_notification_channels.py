@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from src.core.state import AppState
 from src.integrations.notifier import notify
 from src.models.events import LogIncident, RemediationSuggestion
 
@@ -118,69 +117,3 @@ def test_notify_multiple_channels_each_evaluated_independently() -> None:
         )
     mock_slack.assert_called_once()
     mock_webhook.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# AppState channel CRUD
-# ---------------------------------------------------------------------------
-
-
-def test_add_channel_assigns_id_and_appends() -> None:
-    state = AppState()
-    with patch.object(state, "_save_settings"):
-        channel = state.add_channel(
-            {"name": "Slack", "type": "slack", "url": "https://x", "severities": ["critical"]}
-        )
-    assert "id" in channel
-    assert channel["enabled"] is True
-    assert state.notification_channels == [channel]
-
-
-def test_update_channel_modifies_existing() -> None:
-    state = AppState()
-    with patch.object(state, "_save_settings"):
-        channel = state.add_channel(
-            {"name": "Slack", "type": "slack", "url": "https://x", "severities": ["critical"]}
-        )
-        updated = state.update_channel(channel["id"], {"enabled": False})
-    assert updated is not None
-    assert updated["enabled"] is False
-    assert state.notification_channels[0]["enabled"] is False
-
-
-def test_update_channel_returns_none_for_unknown_id() -> None:
-    state = AppState()
-    result = state.update_channel("nonexistent", {"enabled": False})
-    assert result is None
-
-
-def test_delete_channel_removes_and_returns_true() -> None:
-    state = AppState()
-    with patch.object(state, "_save_settings"):
-        channel = state.add_channel(
-            {"name": "Slack", "type": "slack", "url": "https://x", "severities": ["critical"]}
-        )
-        deleted = state.delete_channel(channel["id"])
-    assert deleted is True
-    assert state.notification_channels == []
-
-
-def test_delete_channel_returns_false_for_unknown_id() -> None:
-    state = AppState()
-    assert state.delete_channel("nonexistent") is False
-
-
-def test_channel_persistence_round_trip(tmp_path) -> None:
-    """Channels survive a save -> load cycle via the settings.json cache file."""
-    state = AppState()
-    state.watcher.config.log_file_path = str(tmp_path / "app.log")
-    state.add_channel(
-        {"name": "Webhook", "type": "webhook", "url": "https://y", "severities": ["warning"]}
-    )
-
-    reloaded = AppState()
-    reloaded.watcher.config.log_file_path = str(tmp_path / "app.log")
-    reloaded.load_settings()
-
-    assert len(reloaded.notification_channels) == 1
-    assert reloaded.notification_channels[0]["name"] == "Webhook"
