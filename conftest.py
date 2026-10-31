@@ -5,6 +5,7 @@ import sys
 import uuid
 
 sys.path.insert(0, os.getcwd())
+os.environ.setdefault("SENTINAI_EVENT_WORKER", "0")  # tests start no background worker
 
 import pytest  # noqa: E402
 from dotenv import dotenv_values  # noqa: E402

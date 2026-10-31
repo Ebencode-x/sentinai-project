@@ -118,7 +118,7 @@ def incidents() -> list[dict]:
                 "title": tl,
                 "description": inc.stacktrace or tl,
                 "status": "open",
-                "source": tl.split(".")[0] if "." in tl else "sentinai",
+                "source": inc.source or (tl.split(".")[0] if "." in tl else "sentinai"),
             }
         )
     return out

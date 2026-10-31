@@ -3,6 +3,7 @@
 # Load `.env` from project root before any settings import (Git Bash / local runs).
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -23,6 +24,12 @@ from src.api.source_routes import router as source_router
 from src.core.config import settings
 from src.core.state import app_state
 from src.db.startup import prepare_database
+from src.services.event_processor import (
+    EventProcessor,
+    poll_seconds,
+    run_forever,
+    worker_enabled,
+)
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
@@ -57,7 +64,17 @@ async def lifespan(app: FastAPI):
     # Start from end to avoid replaying stale logs during demos.
     app_state.watcher.initialize_position(start_from_end=True)
     app_state.load_settings()
+    stop = asyncio.Event()
+    worker = None
+    if worker_enabled():
+        worker = asyncio.create_task(run_forever(EventProcessor(app_state), stop, poll_seconds()))
     yield
+    stop.set()
+    if worker is not None:
+        try:
+            await asyncio.wait_for(worker, timeout=10)
+        except TimeoutError:
+            worker.cancel()
 
 
 app = FastAPI(

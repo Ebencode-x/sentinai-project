@@ -11,6 +11,7 @@ from src.core.audit import AuditLogger, SessionFactory, audit_logger
 from src.core.config import settings
 from src.core.crypto import KEY_ENV, MASK_MARK, SecretKeyError, decrypt, encrypt, mask_url
 from src.core.metrics import metrics
+from src.db import ingest as event_store
 from src.db import repository
 from src.db.session import SessionLocal
 from src.integrations.notifier import notify
@@ -55,25 +56,7 @@ class AppState:
             if outcome == "repeat":
                 continue
 
-            suggestion = self.remediation_engine.suggest_fix(
-                incident, autonomy_mode=self.current_autonomy_mode()
-            )
-            if account_id and incident_pk:
-                self._store_suggestion(account_id, incident_pk, suggestion)
-            self._record_audit(incident, suggestion)
-
-            if suggestion.pr_number and suggestion.patch_file and suggestion.before_sha:
-                self.add_rollback_ledger_entry(
-                    incident_id=incident.incident_id,
-                    pr_number=suggestion.pr_number,
-                    pr_url=suggestion.pr_url,
-                    branch_name=suggestion.branch_name,
-                    patch_file=suggestion.patch_file,
-                    before_sha=suggestion.before_sha,
-                )
-
-            # Milestone 3: fire Slack + webhook notifications
-            notify(incident, suggestion, channels=self.delivery_channels())
+            self.analyse_new_incident(incident, account_id, incident_pk)
 
             added += 1
 
@@ -81,6 +64,34 @@ class AppState:
         self.last_scan_at_utc = datetime.now(UTC)
         self.last_scan_new_incidents = added
         return added
+
+    def analyse_new_incident(
+        self, incident: LogIncident, account_id: str | None, incident_pk: str | None
+    ) -> None:
+        """Everything that follows a newly stored incident: suggestion, audit, ledger, alerts.
+
+        Used by the log-file scan and by the event worker, so an incident is handled
+        the same way wherever it came from.
+        """
+        suggestion = self.remediation_engine.suggest_fix(
+            incident, autonomy_mode=self.current_autonomy_mode()
+        )
+        if account_id and incident_pk:
+            self._store_suggestion(account_id, incident_pk, suggestion)
+        self._record_audit(incident, suggestion)
+
+        if suggestion.pr_number and suggestion.patch_file and suggestion.before_sha:
+            self.add_rollback_ledger_entry(
+                incident_id=incident.incident_id,
+                pr_number=suggestion.pr_number,
+                pr_url=suggestion.pr_url,
+                branch_name=suggestion.branch_name,
+                patch_file=suggestion.patch_file,
+                before_sha=suggestion.before_sha,
+            )
+
+        # Milestone 3: fire Slack + webhook notifications
+        notify(incident, suggestion, channels=self.delivery_channels())
 
     def _record_audit(self, incident: LogIncident, suggestion: RemediationSuggestion) -> None:
         """Write one audit entry for a detected incident. Never breaks a scan."""
@@ -168,11 +179,16 @@ class AppState:
         incident_count = 0
         suggestion_count = 0
         reachable = True
+        events_pending = 0
+        events_failed = 0
         try:
             with self.session_factory() as db:
                 account_id = self._resolve_account_id(db)
                 if account_id is not None:
                     found = repository.counts(db, account_id)
+                    queue = event_store.queue_counts(db, account_id)
+                    events_pending = queue["pending"]
+                    events_failed = queue["failed"]
                     incident_count = found["incidents"]
                     suggestion_count = found["suggestions"]
                     for key, total in found["by_source"].items():
@@ -197,6 +213,8 @@ class AppState:
             "last_scan_new_incidents": self.last_scan_new_incidents,
             "recent_suggestions_by_source": by_source,
             "persistence_errors": self.persistence_errors,
+            "events_pending": events_pending,
+            "events_failed": events_failed,
             "database_reachable": reachable,
             "llm_metrics": metrics.snapshot(),
         }
