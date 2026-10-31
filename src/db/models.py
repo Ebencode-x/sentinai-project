@@ -6,9 +6,9 @@ Design notes (see docs/account-model-design.md):
 - Role is a flat enum: admin | viewer. No fine-grained permissions.
 - Session tokens are opaque, stored server-side, and revocable immediately
   (deleting the row logs the user out) — chosen over JWT for that reason.
-- Incidents and suggestions are stored here (Incident, Suggestion). Settings,
-  notification channels and the rollback ledger have tables too, but still run
-  from AppState's JSON files until they are switched over.
+- Incidents, suggestions, settings and notification channels are stored here (a
+  channel URL is a secret, so it is kept encrypted). The rollback ledger has a
+  table too, but still runs from AppState's JSON file until it is switched over.
 """
 
 from __future__ import annotations

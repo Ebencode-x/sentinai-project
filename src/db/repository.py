@@ -9,11 +9,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.db.models import Account, Incident, Suggestion
+from src.db.models import Account, AccountSettings, Incident, NotificationChannel, Suggestion
 from src.models.events import LogIncident, RemediationSuggestion
 
 
@@ -183,3 +183,69 @@ def counts(db: Session, account_id: str) -> dict:
         "suggestions": sum(by_source.values()),
         "by_source": by_source,
     }
+
+
+def get_autonomy_mode(db: Session, account_id: str) -> str | None:
+    stmt = select(AccountSettings.autonomy_mode).where(AccountSettings.account_id == account_id)
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def set_autonomy_mode(
+    db: Session, account_id: str, mode: str, updated_by: str | None = None
+) -> None:
+    row = db.get(AccountSettings, account_id)
+    if row is None:
+        db.add(AccountSettings(account_id=account_id, autonomy_mode=mode, updated_by=updated_by))
+    else:
+        row.autonomy_mode = mode
+        row.updated_by = updated_by
+    db.commit()
+
+
+def list_channels(db: Session, account_id: str) -> list[NotificationChannel]:
+    stmt = (
+        select(NotificationChannel)
+        .where(NotificationChannel.account_id == account_id)
+        .order_by(NotificationChannel.created_at, NotificationChannel.id)
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def get_channel(db: Session, account_id: str, channel_id: str) -> NotificationChannel | None:
+    stmt = select(NotificationChannel).where(
+        NotificationChannel.account_id == account_id, NotificationChannel.id == channel_id
+    )
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def add_channel(
+    db: Session,
+    account_id: str,
+    *,
+    name: str,
+    type_: str,
+    url_encrypted: str,
+    severities: list[str],
+    enabled: bool = True,
+) -> NotificationChannel:
+    row = NotificationChannel(
+        account_id=account_id,
+        name=name,
+        type=type_,
+        url_encrypted=url_encrypted,
+        severities=severities,
+        enabled=enabled,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def delete_channel(db: Session, account_id: str, channel_id: str) -> bool:
+    result = db.execute(
+        delete(NotificationChannel).where(
+            NotificationChannel.account_id == account_id, NotificationChannel.id == channel_id
+        )
+    )
+    db.commit()
+    return result.rowcount > 0

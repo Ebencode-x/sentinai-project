@@ -65,3 +65,13 @@ def app_db(pg_url):
         account_id = account.id
     yield factory, account_id
     engine.dispose()
+
+
+@pytest.fixture
+def secret_key(monkeypatch):
+    """A fresh encryption key in the environment, for tests that store channel URLs."""
+    from cryptography.fernet import Fernet
+
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("SENTINAI_SECRET_KEY", key)
+    return key

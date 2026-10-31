@@ -11,6 +11,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
 from src.api.deps import require_role, require_user
+from src.core.crypto import SecretKeyError
 from src.core.health import CheckStatus, run_liveness, run_readiness
 from src.core.metrics import shared_registry
 from src.core.state import app_state
@@ -151,14 +152,14 @@ class AutonomyModeUpdate(BaseModel):
 
 @router.get("/settings/autonomy", dependencies=_PROTECTED, tags=["settings"])
 def get_autonomy_mode() -> dict:
-    return {"mode": app_state.autonomy_mode}
+    return {"mode": app_state.current_autonomy_mode()}
 
 
 @router.patch("/settings/autonomy", dependencies=_ADMIN_ONLY, tags=["settings"])
 def set_autonomy_mode(body: AutonomyModeUpdate) -> dict:
     app_state.set_autonomy_mode(body.mode)
     logger.info("Autonomy mode changed to: %s", body.mode)
-    return {"mode": app_state.autonomy_mode}
+    return {"mode": body.mode}
 
 
 class ChannelCreate(BaseModel):
@@ -178,19 +179,25 @@ class ChannelUpdate(BaseModel):
 
 @router.get("/settings/channels", dependencies=_PROTECTED, tags=["settings"])
 def list_channels() -> list[dict]:
-    return app_state.notification_channels
+    return app_state.channels()
 
 
 @router.post("/settings/channels", dependencies=_ADMIN_ONLY, tags=["settings"])
 def create_channel(body: ChannelCreate) -> dict:
-    channel = app_state.add_channel(body.model_dump())
+    try:
+        channel = app_state.add_channel(body.model_dump())
+    except SecretKeyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     logger.info("Notification channel created: %s (%s)", channel["name"], channel["type"])
     return channel
 
 
 @router.patch("/settings/channels/{channel_id}", dependencies=_ADMIN_ONLY, tags=["settings"])
 def patch_channel(channel_id: str, body: ChannelUpdate) -> dict:
-    channel = app_state.update_channel(channel_id, body.model_dump(exclude_unset=True))
+    try:
+        channel = app_state.update_channel(channel_id, body.model_dump(exclude_unset=True))
+    except SecretKeyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if channel is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return channel
