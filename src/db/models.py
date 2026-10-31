@@ -145,6 +145,7 @@ class Incident(Base):
     trigger_line: Mapped[str] = mapped_column(Text)
     stacktrace: Mapped[str] = mapped_column(Text, default="")
     context_before_error: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str | None] = mapped_column(String(64), default=None)
 
 
 class Suggestion(Base):
@@ -226,3 +227,60 @@ class NotificationChannel(Base):
     )
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Source(Base):
+    """A service that sends events to SentinAI. Each source has its own API key.
+
+    Only a hash of the key is stored, so a lost key is replaced, never recovered.
+    """
+
+    __tablename__ = "sources"
+    __table_args__ = (UniqueConstraint("account_id", "name", name="uq_sources_account_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    key_prefix: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    key_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str | None] = mapped_column(String(255), default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class IngestedEvent(Base):
+    """One event received from a source, stored before it is turned into an incident.
+
+    event_id is chosen by the sender and is unique per source, so a retry is not
+    counted twice. processed_at stays empty until the event has been handled.
+    """
+
+    __tablename__ = "ingest_events"
+    __table_args__ = (
+        UniqueConstraint("source_id", "event_id", name="uq_ingest_events_source_event"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str] = mapped_column(String(64))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    level: Mapped[str] = mapped_column(String(16), default="error")
+    message: Mapped[str] = mapped_column(Text)
+    exception_type: Mapped[str | None] = mapped_column(String(255), default=None)
+    stacktrace: Mapped[str | None] = mapped_column(Text, default=None)
+    environment: Mapped[str | None] = mapped_column(String(32), default=None)
+    release: Mapped[str | None] = mapped_column(String(64), default=None)
+    request_id: Mapped[str | None] = mapped_column(String(128), default=None)
+    fingerprint: Mapped[str] = mapped_column(String(255), index=True)
+    incident_pk: Mapped[str | None] = mapped_column(
+        ForeignKey("incidents.id", ondelete="SET NULL"), index=True, default=None
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True, default=None
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, default=None)
