@@ -13,7 +13,14 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.db.models import Account, AccountSettings, Incident, NotificationChannel, Suggestion
+from src.db.models import (
+    Account,
+    AccountSettings,
+    Incident,
+    NotificationChannel,
+    RollbackEntry,
+    Suggestion,
+)
 from src.models.events import LogIncident, RemediationSuggestion
 
 
@@ -249,3 +256,76 @@ def delete_channel(db: Session, account_id: str, channel_id: str) -> bool:
     )
     db.commit()
     return result.rowcount > 0
+
+
+LEDGER_LIST_LIMIT = 500
+
+
+def add_ledger_entry(
+    db: Session,
+    account_id: str,
+    *,
+    fingerprint: str,
+    pr_number: int,
+    pr_url: str | None,
+    branch_name: str | None,
+    patch_file: str,
+    before_sha: str,
+) -> RollbackEntry:
+    row = RollbackEntry(
+        account_id=account_id,
+        fingerprint=fingerprint,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        branch_name=branch_name,
+        patch_file=patch_file,
+        before_sha=before_sha,
+        status="proposed",
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def list_ledger(
+    db: Session, account_id: str, limit: int = LEDGER_LIST_LIMIT
+) -> list[RollbackEntry]:
+    """The latest ledger entries, oldest first."""
+    stmt = (
+        select(RollbackEntry)
+        .where(RollbackEntry.account_id == account_id)
+        .order_by(RollbackEntry.opened_at.desc(), RollbackEntry.id.desc())
+        .limit(limit)
+    )
+    return list(reversed(db.execute(stmt).scalars().all()))
+
+
+def get_ledger_entry(
+    db: Session, account_id: str, ledger_id: str, *, lock: bool = False
+) -> RollbackEntry | None:
+    """One entry. With lock=True the row stays locked until the transaction ends,
+    so two admins cannot revert the same patch at the same time."""
+    stmt = select(RollbackEntry).where(
+        RollbackEntry.account_id == account_id, RollbackEntry.id == ledger_id
+    )
+    if lock:
+        stmt = stmt.with_for_update()
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def ledger_to_dict(row: RollbackEntry) -> dict:
+    return {
+        "id": row.id,
+        "incident_id": row.fingerprint,
+        "pr_number": row.pr_number,
+        "pr_url": row.pr_url,
+        "branch_name": row.branch_name,
+        "patch_file": row.patch_file,
+        "before_sha": row.before_sha,
+        "after_sha": row.after_sha,
+        "merge_commit_sha": row.merge_commit_sha,
+        "rollback_current_sha": row.rollback_current_sha,
+        "revert_commit_sha": row.revert_commit_sha,
+        "status": row.status,
+        "opened_at": row.opened_at.isoformat(),
+    }

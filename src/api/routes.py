@@ -213,7 +213,7 @@ def remove_channel(channel_id: str) -> dict:
 
 @router.get("/rollbacks", dependencies=_PROTECTED, tags=["rollbacks"])
 def list_rollbacks() -> list[dict]:
-    return app_state.rollback_ledger
+    return app_state.list_rollbacks()
 
 
 @router.post("/rollbacks/{ledger_id}/propose", dependencies=_ADMIN_ONLY, tags=["rollbacks"])
