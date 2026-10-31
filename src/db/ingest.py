@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.db.models import IngestedEvent, Source
+
+MAX_ATTEMPTS = 5
 
 
 @dataclass(frozen=True)
@@ -66,3 +68,15 @@ def store_events(db: Session, source: Source, events: list[NewEvent]) -> tuple[i
         )
     db.commit()
     return stored, duplicates
+
+
+def queue_counts(db: Session, account_id: str, max_attempts: int = MAX_ATTEMPTS) -> dict[str, int]:
+    """How many stored events wait to become incidents, and how many gave up."""
+    waiting = (
+        select(func.count())
+        .select_from(IngestedEvent)
+        .where(IngestedEvent.account_id == account_id, IngestedEvent.processed_at.is_(None))
+    )
+    pending = db.execute(waiting.where(IngestedEvent.attempts < max_attempts)).scalar_one()
+    failed = db.execute(waiting.where(IngestedEvent.attempts >= max_attempts)).scalar_one()
+    return {"pending": pending, "failed": failed}

@@ -282,5 +282,6 @@ class IngestedEvent(Base):
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True, default=None
     )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, default=None)

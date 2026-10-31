@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,50 +30,78 @@ def default_account_id(db: Session) -> str | None:
     return db.execute(stmt).scalar_one_or_none()
 
 
+def _find_incident_id(db: Session, account_id: str, fingerprint: str) -> str | None:
+    stmt = select(Incident.id).where(
+        Incident.account_id == account_id, Incident.fingerprint == fingerprint
+    )
+    return db.execute(stmt).scalar_one_or_none()
+
+
 def _count_repeat(db: Session, account_id: str, fingerprint: str, seen_at: datetime) -> None:
+    """Count one more occurrence. last_seen_at only ever moves forward."""
     db.execute(
         update(Incident)
         .where(Incident.account_id == account_id, Incident.fingerprint == fingerprint)
-        .values(occurrence_count=Incident.occurrence_count + 1, last_seen_at=seen_at)
+        .values(
+            occurrence_count=Incident.occurrence_count + 1,
+            last_seen_at=case(
+                (Incident.last_seen_at < seen_at, seen_at), else_=Incident.last_seen_at
+            ),
+        )
+        .execution_options(synchronize_session=False)
     )
-    db.commit()
+
+
+def upsert_incident(
+    db: Session, account_id: str, incident: LogIncident, *, commit: bool = True
+) -> tuple[str, bool]:
+    """Store the incident, or count a repeat of a known one. Returns (row id, is_new).
+
+    With commit=False the caller commits, so the incident and whatever else it
+    writes (such as marking an event processed) are saved together or not at all.
+    When two writers race, the unique constraint decides: the loser counts a repeat.
+    """
+    fingerprint = incident.incident_id
+    row_id = _find_incident_id(db, account_id, fingerprint)
+    is_new = False
+    if row_id is None:
+        candidate = str(uuid.uuid4())
+        try:
+            with db.begin_nested():
+                db.add(
+                    Incident(
+                        id=candidate,
+                        account_id=account_id,
+                        fingerprint=fingerprint,
+                        detected_at=incident.detected_at_utc,
+                        last_seen_at=incident.detected_at_utc,
+                        occurrence_count=1,
+                        severity=incident.severity,
+                        trigger_line=incident.trigger_line,
+                        stacktrace=incident.stacktrace,
+                        context_before_error=incident.context_before_error,
+                        source=incident.source,
+                    )
+                )
+            row_id, is_new = candidate, True
+        except IntegrityError:
+            row_id = _find_incident_id(db, account_id, fingerprint)
+            if row_id is None:
+                raise
+    if not is_new:
+        _count_repeat(db, account_id, fingerprint, incident.detected_at_utc)
+    if commit:
+        db.commit()
+    return row_id, is_new
 
 
 def insert_incident_if_new(db: Session, account_id: str, incident: LogIncident) -> str | None:
     """Store the incident and return its row id, or None when it was already known.
 
-    A known fingerprint only raises occurrence_count and last_seen_at. When two
-    scans race, the unique constraint decides: the loser counts a repeat.
+    A known fingerprint only raises occurrence_count and last_seen_at.
     """
-    fingerprint = incident.incident_id
-    known = db.execute(
-        select(Incident.id).where(
-            Incident.account_id == account_id, Incident.fingerprint == fingerprint
-        )
-    ).scalar_one_or_none()
-    if known is None:
-        row_id = str(uuid.uuid4())
-        db.add(
-            Incident(
-                id=row_id,
-                account_id=account_id,
-                fingerprint=fingerprint,
-                detected_at=incident.detected_at_utc,
-                last_seen_at=incident.detected_at_utc,
-                occurrence_count=1,
-                severity=incident.severity,
-                trigger_line=incident.trigger_line,
-                stacktrace=incident.stacktrace,
-                context_before_error=incident.context_before_error,
-            )
-        )
-        try:
-            db.commit()
-            return row_id
-        except IntegrityError:
-            db.rollback()  # another scan stored it first
-    _count_repeat(db, account_id, fingerprint, incident.detected_at_utc)
-    return None
+    row_id, is_new = upsert_incident(db, account_id, incident)
+    return row_id if is_new else None
 
 
 def _to_incident(row: Incident) -> LogIncident:
@@ -84,6 +112,7 @@ def _to_incident(row: Incident) -> LogIncident:
         trigger_line=row.trigger_line,
         stacktrace=row.stacktrace,
         context_before_error=row.context_before_error,
+        source=row.source,
     )
 
 

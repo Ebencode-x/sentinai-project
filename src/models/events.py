@@ -18,6 +18,7 @@ class LogIncident(BaseModel):
     trigger_line: str
     stacktrace: str
     context_before_error: str = ""
+    source: str | None = Field(default=None, description="Service that reported it, if known.")
 
 
 class RemediationSuggestion(BaseModel):
