@@ -17,6 +17,14 @@ TOUCH_INTERVAL = timedelta(minutes=1)
 _DUMMY_HASH = "0" * 64
 
 
+class SourceNameTaken(ValueError):
+    """A source with this name already exists in the account."""
+
+
+class SourceRevoked(ValueError):
+    """The source is revoked and can no longer be changed."""
+
+
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
@@ -40,7 +48,7 @@ def create_source(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise ValueError(f"A source named '{name}' already exists.") from exc
+        raise SourceNameTaken(f"A source named '{name}' already exists.") from exc
     return row, key
 
 
@@ -75,7 +83,7 @@ def rotate_key(db: Session, account_id: str, source_id: str) -> str | None:
     if row is None:
         return None
     if row.revoked_at is not None:
-        raise ValueError("This source is revoked.")
+        raise SourceRevoked("This source is revoked.")
     key, prefix, key_hash = generate_key()
     row.key_prefix = prefix
     row.key_hash = key_hash

@@ -18,6 +18,7 @@ from src.api.auth_routes import router as auth_router
 from src.api.chat import router as chat_router
 from src.api.ingest_routes import router as ingest_router
 from src.api.routes import router
+from src.api.source_routes import router as source_router
 from src.core.config import settings
 from src.core.state import app_state
 from src.db.startup import prepare_database
@@ -96,6 +97,7 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(ingest_router, prefix="/api")
+app.include_router(source_router, prefix="/api")
 
 _frontend_dist = __import__("pathlib").Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():
