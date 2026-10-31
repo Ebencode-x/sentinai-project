@@ -38,7 +38,6 @@ class AppState:
     _account_id: str | None = None
     _scan_lock: threading.Lock = field(default_factory=threading.Lock)
     autonomy_mode: str = field(default_factory=lambda: settings.autonomy_mode)
-    rollback_ledger: list[dict] = field(default_factory=list)
     audit: AuditLogger = field(default_factory=lambda: audit_logger)
     total_scan_runs: int = 0
     last_scan_at_utc: datetime | None = None
@@ -258,36 +257,6 @@ class AppState:
         path.unlink()
         logger.info("[state] Imported settings.json into the database and removed the file")
 
-    def _rollback_ledger_cache_path(self):
-        import pathlib
-
-        p = pathlib.Path(self.watcher.config.log_file_path).parent / "rollback_ledger.json"
-        return p
-
-    def _save_rollback_ledger(self):
-        import json
-
-        try:
-            self._rollback_ledger_cache_path().write_text(
-                json.dumps(self.rollback_ledger, default=str)
-            )
-        except Exception as e:
-            logger.warning("[state] Failed to save rollback ledger: %s", e)
-
-    def load_rollback_ledger(self):
-        import json
-
-        p = self._rollback_ledger_cache_path()
-        if not p.exists():
-            return
-        try:
-            data = json.loads(p.read_text())
-            if isinstance(data, list):
-                self.rollback_ledger = data
-                logger.info("[state] Loaded %d rollback ledger entr(y/ies) from cache", len(data))
-        except Exception as e:
-            logger.warning("[state] Failed to load rollback ledger: %s", e)
-
     def add_rollback_ledger_entry(
         self,
         incident_id: str,
@@ -296,105 +265,130 @@ class AppState:
         branch_name: str | None,
         patch_file: str,
         before_sha: str,
-    ) -> dict:
-        import uuid
-        from datetime import UTC, datetime
+    ) -> dict | None:
+        """Record an auto-patch PR so it can be reverted later.
 
-        entry = {
-            "id": str(uuid.uuid4()),
-            "incident_id": incident_id,
-            "pr_number": pr_number,
-            "pr_url": pr_url,
-            "branch_name": branch_name,
-            "patch_file": patch_file,
-            "before_sha": before_sha,
-            "after_sha": None,
-            "merge_commit_sha": None,
-            "status": "proposed",  # proposed -> applied -> rollback_proposed -> rolled_back
-            "opened_at": datetime.now(UTC).isoformat(),
-        }
-        self.rollback_ledger.append(entry)
-        self._save_rollback_ledger()
-        return entry
+        This is the only record of what SentinAI changed in a repository, so a
+        failure is logged loudly with the PR number instead of being swallowed.
+        """
+        try:
+            with self.session_factory() as db:
+                account_id = self._require_account_id(db)
+                row = repository.add_ledger_entry(
+                    db,
+                    account_id,
+                    fingerprint=incident_id,
+                    pr_number=pr_number,
+                    pr_url=pr_url,
+                    branch_name=branch_name,
+                    patch_file=patch_file,
+                    before_sha=before_sha,
+                )
+                return repository.ledger_to_dict(row)
+        except Exception:
+            self.persistence_errors += 1
+            logger.exception(
+                "[state] LEDGER ENTRY NOT SAVED for PR #%s (%s): rollback will not be offered",
+                pr_number,
+                pr_url,
+            )
+            return None
+
+    def list_rollbacks(self) -> list[dict]:
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return []
+            return [
+                repository.ledger_to_dict(row) for row in repository.list_ledger(db, account_id)
+            ]
 
     def get_rollback_ledger_entry(self, ledger_id: str) -> dict | None:
-        for entry in self.rollback_ledger:
-            if entry["id"] == ledger_id:
-                return entry
-        return None
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return None
+            row = repository.get_ledger_entry(db, account_id, ledger_id)
+            return repository.ledger_to_dict(row) if row else None
 
     def propose_rollback(self, ledger_id: str) -> dict:
-        entry = self.get_rollback_ledger_entry(ledger_id)
-        if entry is None:
-            raise ValueError("Ledger entry not found.")
         github = self.remediation_engine.github_client
-        if github is None:
-            raise ValueError("GitHub integration not configured.")
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            row = repository.get_ledger_entry(db, account_id, ledger_id, lock=True)
+            if row is None:
+                raise ValueError("Ledger entry not found.")
+            if row.status == "rolled_back":
+                raise ValueError("This patch has already been rolled back.")
+            if github is None:
+                raise ValueError("GitHub integration not configured.")
 
-        if entry.get("merge_commit_sha") is None:
-            merge_info = github.check_pr_merged(entry["pr_number"])
-            if merge_info is None:
-                raise ValueError("PR has not been merged yet — nothing to roll back.")
-            entry["merge_commit_sha"] = merge_info["merge_commit_sha"]
-            after_sha = github.get_current_file_sha(entry["patch_file"], ref=entry["branch_name"])
-            entry["after_sha"] = after_sha
-            entry["status"] = "applied"
+            if row.merge_commit_sha is None:
+                merge_info = github.check_pr_merged(row.pr_number)
+                if merge_info is None:
+                    raise ValueError("PR has not been merged yet, nothing to roll back.")
+                row.merge_commit_sha = merge_info["merge_commit_sha"]
+                row.after_sha = github.get_current_file_sha(row.patch_file, ref=row.branch_name)
+                row.status = "applied"
+                db.commit()
 
-        current_sha = github.get_current_file_sha(entry["patch_file"])
-        if current_sha is None:
-            raise ValueError(f"Could not read current state of {entry['patch_file']}.")
+            current_sha = github.get_current_file_sha(row.patch_file)
+            if current_sha is None:
+                raise ValueError(f"Could not read current state of {row.patch_file}.")
 
-        if current_sha != entry["after_sha"]:
-            entry["status"] = "rollback_blocked"
-            self._save_rollback_ledger()
+            if current_sha != row.after_sha:
+                row.status = "rollback_blocked"
+                db.commit()
+                return {
+                    "conflict": True,
+                    "ledger_id": ledger_id,
+                    "patch_file": row.patch_file,
+                    "after_sha": row.after_sha,
+                    "current_sha": current_sha,
+                    "message": (
+                        f"{row.patch_file} has changed since this patch was applied "
+                        "(another patch or a manual commit). Auto-revert blocked."
+                    ),
+                }
+
+            row.status = "rollback_proposed"
+            row.rollback_current_sha = current_sha
+            db.commit()
             return {
-                "conflict": True,
+                "conflict": False,
                 "ledger_id": ledger_id,
-                "patch_file": entry["patch_file"],
-                "after_sha": entry["after_sha"],
-                "current_sha": current_sha,
-                "message": (
-                    f"{entry['patch_file']} has changed since this patch was applied "
-                    "(another patch or a manual commit). Auto-revert blocked."
-                ),
+                "patch_file": row.patch_file,
+                "message": "Clean revert available. Call confirm to execute.",
             }
 
-        entry["status"] = "rollback_proposed"
-        entry["rollback_current_sha"] = current_sha
-        self._save_rollback_ledger()
-        return {
-            "conflict": False,
-            "ledger_id": ledger_id,
-            "patch_file": entry["patch_file"],
-            "message": "Clean revert available. Call confirm to execute.",
-        }
-
     def confirm_rollback(self, ledger_id: str) -> dict:
-        entry = self.get_rollback_ledger_entry(ledger_id)
-        if entry is None:
-            raise ValueError("Ledger entry not found.")
-        if entry.get("status") != "rollback_proposed":
-            raise ValueError(
-                f"Ledger entry status is '{entry.get('status')}', expected 'rollback_proposed'. "
-                "Call propose first."
-            )
         github = self.remediation_engine.github_client
-        if github is None:
-            raise ValueError("GitHub integration not configured.")
+        with self.session_factory() as db:
+            account_id = self._require_account_id(db)
+            row = repository.get_ledger_entry(db, account_id, ledger_id, lock=True)
+            if row is None:
+                raise ValueError("Ledger entry not found.")
+            if row.status != "rollback_proposed":
+                raise ValueError(
+                    f"Ledger entry status is '{row.status}', expected 'rollback_proposed'. "
+                    "Call propose first."
+                )
+            if github is None:
+                raise ValueError("GitHub integration not configured.")
 
-        new_sha = github.revert_patch(
-            patch_file=entry["patch_file"],
-            before_sha=entry["before_sha"],
-            current_sha=entry["rollback_current_sha"],
-            incident_id=entry["incident_id"],
-        )
-        if new_sha is None:
-            raise ValueError("Revert commit failed. Check server logs.")
+            new_sha = github.revert_patch(
+                patch_file=row.patch_file,
+                before_sha=row.before_sha,
+                current_sha=row.rollback_current_sha,
+                incident_id=row.fingerprint,
+            )
+            if new_sha is None:
+                raise ValueError("Revert commit failed. Check server logs.")
 
-        entry["status"] = "rolled_back"
-        entry["revert_commit_sha"] = new_sha
-        self._save_rollback_ledger()
-        return {"ledger_id": ledger_id, "status": "rolled_back", "revert_commit_sha": new_sha}
+            row.status = "rolled_back"
+            row.revert_commit_sha = new_sha
+            db.commit()
+            return {"ledger_id": ledger_id, "status": "rolled_back", "revert_commit_sha": new_sha}
 
     def _require_account_id(self, db) -> str:
         account_id = self._resolve_account_id(db)
