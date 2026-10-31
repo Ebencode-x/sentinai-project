@@ -158,7 +158,13 @@ def test_events_without_an_id_are_always_stored(env):
 
 
 def test_personal_data_is_masked_before_storage(env):
-    trace = 'Traceback (most recent call last):\n  File "a.py", line 1, in f\nValueError: password=hunter2'
+    trace = "\n".join(
+        [
+            "Traceback (most recent call last):",
+            '  File "a.py", line 1, in f',
+            "ValueError: password=hunter2",
+        ]
+    )
     batch = [
         {
             "message": "login failed for farmer@example.com phone 0712345678 from 10.1.2.3",
