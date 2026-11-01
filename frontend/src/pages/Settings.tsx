@@ -9,13 +9,15 @@ import { useHealth } from "@/hooks/useHealth";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/components/Toast";
 import { Card, CardHeader } from "@/components/Card";
+import { SourcesTab } from "@/components/SourcesTab";
 
-type Tab = "general" | "automation" | "system";
+type Tab = "general" | "automation" | "sources" | "system";
 type Severity = "warning" | "critical";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "general", label: "General" },
   { key: "automation", label: "Automation" },
+  { key: "sources", label: "Sources" },
   { key: "system", label: "System" },
 ];
 
@@ -467,6 +469,12 @@ function SystemTab() {
         <CardHeader title="Runtime" />
         <Row label="LLM provider">{stats?.llm_provider ?? "n/a"}</Row>
         <Row label="Scan runs">{stats?.total_scan_runs ?? "n/a"}</Row>
+        <Row label="Events waiting">{stats?.events_pending ?? "n/a"}</Row>
+        <Row label="Events failed">
+          <span style={{ color: (stats?.events_failed ?? 0) > 0 ? "var(--red)" : undefined }}>
+            {stats?.events_failed ?? "n/a"}
+          </span>
+        </Row>
         <Row label="Suggestions">{m?.total_suggestions ?? stats?.total_suggestions ?? "n/a"}</Row>
         <Row label="Fallback rate">
           <span style={{ color: rate != null && rate > 0.2 ? "var(--amber)" : undefined }}>
@@ -526,6 +534,7 @@ export default function Settings() {
           <ChannelsCard isAdmin={isAdmin} />
         </div>
       )}
+      {tab === "sources" && <SourcesTab />}
       {tab === "system" && <SystemTab />}
     </div>
   );
