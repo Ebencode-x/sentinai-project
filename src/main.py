@@ -18,7 +18,6 @@ from src.api.audit_routes import router as audit_router
 from src.api.auth_routes import router as auth_router
 from src.api.chat import router as chat_router
 from src.api.event_routes import router as event_router
-from src.api.ingest_routes import router as ingest_router
 from src.api.routes import router
 from src.api.source_routes import router as source_router
 from src.core.config import settings
@@ -114,7 +113,6 @@ app.include_router(router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
-app.include_router(ingest_router, prefix="/api")
 app.include_router(source_router, prefix="/api")
 app.include_router(event_router, prefix="/api")
 
