@@ -175,9 +175,9 @@ export const api = {
       http.delete<{ deleted: boolean; id: string }>(`/settings/channels/${id}`),
   },
   sources: {
-    list: () => http.get<IngestSource[]>("/sources"),
-    create: (name: string) => http.post<IngestSourceWithKey>("/sources", { name }),
-    rotate: (id: string) => http.post<IngestSourceWithKey>(`/sources/${id}/rotate`),
-    revoke: (id: string) => http.delete<{ revoked: boolean; id: string }>(`/sources/${id}`),
+    list: () => http.get<IngestSource[]>("/api/sources"),
+    create: (name: string) => http.post<IngestSourceWithKey>("/api/sources", { name }),
+    rotate: (id: string) => http.post<IngestSourceWithKey>(`/api/sources/${id}/rotate`),
+    revoke: (id: string) => http.delete<{ revoked: boolean; id: string }>(`/api/sources/${id}`),
   },
 };
