@@ -68,6 +68,10 @@ export interface StatsSnapshot {
   last_scan_at_utc?: string | null;
   last_scan_new_incidents?: number;
   dedupe_window_max?: number;
+  events_pending?: number;
+  events_failed?: number;
+  persistence_errors?: number;
+  database_reachable?: boolean;
   recent_suggestions_by_source?: {
     stub: number;
     provider: number;
@@ -130,6 +134,22 @@ export interface ChannelUpdatePayload {
   enabled?: boolean;
 }
 
+export interface IngestSource {
+  id: string;
+  name: string;
+  key_prefix: string;
+  status: "active" | "revoked";
+  created_at: string;
+  created_by: string | null;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  last_event_at: string | null;
+}
+
+export interface IngestSourceWithKey extends IngestSource {
+  key: string;
+}
+
 // ── API surface ────────────────────────────────────────────────────────────
 
 export const api = {
@@ -153,5 +173,11 @@ export const api = {
       http.patch<NotificationChannel>(`/settings/channels/${id}`, payload),
     deleteChannel: (id: string) =>
       http.delete<{ deleted: boolean; id: string }>(`/settings/channels/${id}`),
+  },
+  sources: {
+    list: () => http.get<IngestSource[]>("/sources"),
+    create: (name: string) => http.post<IngestSourceWithKey>("/sources", { name }),
+    rotate: (id: string) => http.post<IngestSourceWithKey>(`/sources/${id}/rotate`),
+    revoke: (id: string) => http.delete<{ revoked: boolean; id: string }>(`/sources/${id}`),
   },
 };
