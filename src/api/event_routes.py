@@ -21,9 +21,9 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from src.api.ingest_routes import scrub
 from src.core.fingerprint import fingerprint
 from src.core.rate_limiter import TokenBucket
+from src.core.scrub import scrub
 from src.db import ingest as event_store
 from src.db import sources
 from src.db.session import get_db

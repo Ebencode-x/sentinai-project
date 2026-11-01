@@ -19,22 +19,22 @@ const LINES: { k?: string; t: string; c?: string }[] = [
 ];
 
 const STEPS = [
-  { n: "01", name: "Ingest", text: "Send ERROR lines from any service with a single HTTP request." },
+  { n: "01", name: "Ingest", text: "Send errors from any service with a single HTTP request." },
   { n: "02", name: "Detect", text: "Tracebacks stay whole and repeats merge into one incident." },
   { n: "03", name: "Suggest", text: "A fix is drafted for every incident and checked before you see it." },
   { n: "04", name: "Audit", text: "Each suggestion is recorded with its model and waits for your review." },
 ];
 
 const SNIPPET = [
-  "curl -X POST https://sentinai.onrender.com/api/ingest \\",
-  "  -H \"X-Ingest-Key: $SENTINAI_INGEST_KEY\" \\",
+  "curl -X POST https://sentinai.onrender.com/api/v1/events \\",
+  "  -H \"Authorization: Bearer $SENTINAI_API_KEY\" \\",
   "  -H \"Content-Type: application/json\" \\",
-  "  -d '{\"source\": \"orders-api\", \"events\": [{\"message\": \"KeyError: customer_id\"}]}'",
+  "  -d '{\"events\": [{\"message\": \"KeyError: customer_id\", \"level\": \"error\"}]}'",
 ];
 
 const GUARDS = [
-  { name: "Personal data masking", text: "Emails, phone numbers, IP addresses, OTPs and credentials are masked before a line is ever written." },
-  { name: "Tamper-proof ingest", text: "The server writes every log line itself, so a client can never forge one." },
+  { name: "Personal data masking", text: "Emails, phone numbers, IP addresses, OTPs and credentials are masked before an event is stored." },
+  { name: "Durable ingest", text: "An event is saved before the server replies, and a retry with the same event_id is never counted twice." },
   { name: "Prompt injection defense", text: "Instructions hidden inside logs are treated as data, never as commands." },
   { name: "Patch validator", text: "Suggested code is parsed and checked structurally before it is shown." },
   { name: "Audit trail", text: "Every decision is stored with its time, provider and model, and can be reviewed." },
