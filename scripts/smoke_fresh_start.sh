@@ -31,6 +31,7 @@ start_server() {
   : > "$LOG"
   env -i PATH="$PATH" HOME="$WORK" \
     DATABASE_URL="$DB_URL" LOG_FILE_PATH="$WORK/app.log" \
+    SENTINAI_ENV_FILE="$WORK/no-such.env" \
     "$PY" -m uvicorn src.main:app --port "$PORT" > "$LOG" 2>&1 &
   PID=$!
   i=0
