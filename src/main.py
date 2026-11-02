@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -30,7 +31,10 @@ from src.services.event_processor import (
     worker_enabled,
 )
 
-_env_path = Path(__file__).resolve().parent.parent / ".env"
+# SENTINAI_ENV_FILE lets a caller (the fresh-start smoke test) use another file.
+_env_path = Path(
+    os.environ.get("SENTINAI_ENV_FILE") or Path(__file__).resolve().parent.parent / ".env"
+)
 load_dotenv(_env_path)
 
 
