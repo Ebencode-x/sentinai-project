@@ -4,11 +4,8 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -22,6 +19,7 @@ from src.api.event_routes import router as event_router
 from src.api.routes import router
 from src.api.source_routes import router as source_router
 from src.core.config import settings
+from src.core.env import load_env
 from src.core.state import app_state
 from src.db.startup import prepare_database
 from src.services.event_processor import (
@@ -31,11 +29,7 @@ from src.services.event_processor import (
     worker_enabled,
 )
 
-# SENTINAI_ENV_FILE lets a caller (the fresh-start smoke test) use another file.
-_env_path = Path(
-    os.environ.get("SENTINAI_ENV_FILE") or Path(__file__).resolve().parent.parent / ".env"
-)
-load_dotenv(_env_path)
+load_env()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

@@ -1,8 +1,8 @@
 from logging.config import fileConfig
 
-from dotenv import load_dotenv
+from src.core.env import load_env
 
-load_dotenv()
+load_env()
 
 from sqlalchemy import engine_from_config, pool  # noqa: E402
 

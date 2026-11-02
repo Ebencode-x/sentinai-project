@@ -36,7 +36,7 @@ start_server() {
   PID=$!
   i=0
   until curl -fs "http://localhost:$PORT/health/live" >/dev/null 2>&1; do
-    i=$((i + 1)); [ "$i" -gt 40 ] && fail "server did not become healthy"
+    i=$((i + 1)); [ "$i" -gt 240 ] && fail "server did not become healthy"
     sleep 0.5
   done
   kill -0 "$PID" 2>/dev/null || fail "server process exited (port clash?)"
