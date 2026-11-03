@@ -11,6 +11,7 @@ from src.core.audit import AuditLogger, SessionFactory, audit_logger
 from src.core.config import settings
 from src.core.crypto import KEY_ENV, MASK_MARK, SecretKeyError, decrypt, encrypt, mask_url
 from src.core.metrics import metrics
+from src.core.url_guard import validate_channel_url
 from src.db import ingest as event_store
 from src.db import repository
 from src.db.session import SessionLocal
@@ -488,6 +489,7 @@ class AppState:
             return []
 
     def add_channel(self, data: dict) -> dict:
+        validate_channel_url(data["url"])
         token = encrypt(data["url"])  # raises SecretKeyError before the database is touched
         with self.session_factory() as db:
             account_id = self._require_account_id(db)
@@ -515,6 +517,7 @@ class AppState:
             new_url = updates.get("url")
             # A masked URL sent back by a client must never replace the real one.
             if new_url is not None and MASK_MARK not in new_url:
+                validate_channel_url(new_url)
                 row.url_encrypted = encrypt(new_url)
             db.commit()
             return self._channel_view(row, self._masked_url(row))

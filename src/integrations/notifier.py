@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from src.core.url_guard import UnsafeUrlError, validate_channel_url
 from src.models.events import LogIncident, RemediationSuggestion
 
 logger = logging.getLogger(__name__)
@@ -99,9 +100,14 @@ def _send_slack_to(url: str, incident: LogIncident, suggestion: RemediationSugge
     """Send a Slack notification to an arbitrary channel URL (multi-channel routing)."""
     if not url:
         return
+    try:
+        validate_channel_url(url)
+    except UnsafeUrlError as exc:
+        logger.warning("Slack channel notification blocked: %s", exc)
+        return
     payload = _build_slack_payload(incident, suggestion)
     try:
-        with httpx.Client(timeout=NOTIFICATION_TIMEOUT) as client:
+        with httpx.Client(timeout=NOTIFICATION_TIMEOUT, follow_redirects=False) as client:
             response = client.post(url, json=payload)
         if not response.is_success:
             logger.warning(
@@ -121,9 +127,14 @@ def _send_webhook_to(url: str, incident: LogIncident, suggestion: RemediationSug
     """Send a generic webhook notification to an arbitrary channel URL (multi-channel routing)."""
     if not url:
         return
+    try:
+        validate_channel_url(url)
+    except UnsafeUrlError as exc:
+        logger.warning("Webhook channel notification blocked: %s", exc)
+        return
     payload = _build_generic_payload(incident, suggestion)
     try:
-        with httpx.Client(timeout=NOTIFICATION_TIMEOUT) as client:
+        with httpx.Client(timeout=NOTIFICATION_TIMEOUT, follow_redirects=False) as client:
             response = client.post(
                 url,
                 json=payload,

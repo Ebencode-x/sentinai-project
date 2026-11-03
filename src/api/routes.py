@@ -8,13 +8,14 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from src.api.deps import require_role, require_user
-from src.core.crypto import SecretKeyError
+from src.core.crypto import MASK_MARK, SecretKeyError
 from src.core.health import CheckStatus, run_liveness, run_readiness
 from src.core.metrics import shared_registry
 from src.core.state import app_state
+from src.core.url_guard import validate_channel_url
 from src.db.models import Role
 
 logger = logging.getLogger(__name__)
@@ -169,12 +170,24 @@ class ChannelCreate(BaseModel):
     severities: list[Literal["warning", "critical"]]
     enabled: bool = True
 
+    @field_validator("url")
+    @classmethod
+    def url_must_be_safe(cls, value: str) -> str:
+        return validate_channel_url(value)
+
 
 class ChannelUpdate(BaseModel):
     name: str | None = None
     url: str | None = None
     severities: list[Literal["warning", "critical"]] | None = None
     enabled: bool | None = None
+
+    @field_validator("url")
+    @classmethod
+    def url_must_be_safe(cls, value: str | None) -> str | None:
+        if value is None or MASK_MARK in value:
+            return value
+        return validate_channel_url(value)
 
 
 @router.get("/settings/channels", dependencies=_PROTECTED, tags=["settings"])
