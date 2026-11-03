@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { LogOut, Plus, Trash2 } from "lucide-react";
-import { api, type AutonomySettings } from "@/api/client";
+import { api, type AutonomySettings, errorReason } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useHealth } from "@/hooks/useHealth";
 import { useTheme } from "@/hooks/useTheme";
@@ -290,8 +290,9 @@ function ChannelsCard({ isAdmin }: { isAdmin: boolean }) {
       await refetch();
       resetForm();
       toast("Channel added", "ok");
-    } catch {
-      setFormError("Could not save the channel.");
+    } catch (err) {
+      const reason = errorReason(err);
+      setFormError(reason ? `Could not save the channel: ${reason}` : "Could not save the channel.");
     } finally {
       setSaving(false);
     }

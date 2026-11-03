@@ -193,3 +193,20 @@ class TestScanNow:
             data = client.post("/scan-now").json()
             assert data["detected_incidents"] == 5
             m.assert_called_once()
+
+
+def test_channel_create_422_gives_readable_reason(client):
+    """The UI shows detail[].msg after stripping the pydantic prefix."""
+    cases = {
+        "https://127.0.0.1/x": "internal or reserved address",
+        "https://localhost/x": "Internal host names are not allowed",
+    }
+    for url, expected in cases.items():
+        res = client.post(
+            "/settings/channels",
+            json={"name": "ops", "type": "slack", "url": url, "severities": ["critical"]},
+        )
+        assert res.status_code == 422
+        detail = res.json()["detail"]
+        assert isinstance(detail, list)
+        assert expected in detail[0]["msg"]

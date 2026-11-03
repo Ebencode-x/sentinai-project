@@ -29,6 +29,21 @@ http.interceptors.response.use(
 
 // ── Domain types ──────────────────────────────────────────────────────────
 
+// Readable reason from a rejected API call, or null when there is none.
+export function errorReason(err: unknown): string | null {
+  if (!axios.isAxiosError(err)) return null;
+  const detail = (err.response?.data as { detail?: unknown } | undefined)?.detail;
+  if (typeof detail === "string") return detail.trim() || null;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : ""))
+      .map((m) => m.replace(/^Value error,\s*/i, "").trim())
+      .filter(Boolean);
+    return msgs.length ? msgs.join(". ") : null;
+  }
+  return null;
+}
+
 export interface Incident {
   id: string;
   severity: "critical" | "high" | "medium" | "low";
