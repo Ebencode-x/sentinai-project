@@ -191,4 +191,12 @@ jobs:
 
       - name: Trigger Render deploy
         if: success()
-        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RENDER_DEPLOY_HOOK")
+          case "$status" in
+            2??) echo "Render deploy triggered (HTTP $status)" ;;
+            409) echo "::warning::Render returned 409, a deploy is probably already running" ;;
+            *) echo "::error::Render deploy hook failed with HTTP $status"; exit 1 ;;
+          esac
