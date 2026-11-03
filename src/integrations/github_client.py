@@ -18,8 +18,22 @@ class GitHubClient:
     """Opens a pull request containing the LLM-proposed patch for a given incident."""
 
     def __init__(self) -> None:
+        if not settings.github_token or not settings.github_repo:
+            raise ValueError("GitHub integration is not configured")
         self._client = Github(settings.github_token)
-        self._repo = self._client.get_repo(settings.github_repo)
+        self._repo_name = settings.github_repo
+        self._repo_cache = None
+
+    @property
+    def _repo(self):
+        """Resolve the repository on first use so construction never hits the network."""
+        if self._repo_cache is None:
+            self._repo_cache = self._client.get_repo(self._repo_name)
+        return self._repo_cache
+
+    @_repo.setter
+    def _repo(self, value) -> None:
+        self._repo_cache = value
 
     def open_patch_pr(
         self,

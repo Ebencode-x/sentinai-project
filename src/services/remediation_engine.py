@@ -22,7 +22,12 @@ class RemediationEngine:
     def __init__(self, llm_client: BaseLLMClient | None = None) -> None:
         self._llm_client = llm_client or build_llm_client()
         self._stub = StubLLMClient()
-        self._github = GitHubClient() if settings.github_token and settings.github_repo else None
+        self._github: GitHubClient | None = None
+        if settings.github_token and settings.github_repo:
+            try:
+                self._github = GitHubClient()
+            except Exception as exc:
+                logger.warning("GitHub client unavailable, PR and rollback disabled: %s", exc)
 
     @property
     def github_client(self) -> GitHubClient | None:
