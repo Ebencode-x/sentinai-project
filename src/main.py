@@ -1,6 +1,6 @@
 """FastAPI entrypoint for SentinAI."""
 
-# Load `.env` from project root before any settings import (Git Bash / local runs).
+# src.bootstrap loads .env and must stay the first src import (tests/test_import_order.py).
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
+import src.bootstrap  # noqa: F401
 from src.api.audit_routes import router as audit_router
 from src.api.auth_routes import router as auth_router
 from src.api.chat import router as chat_router
@@ -19,7 +20,6 @@ from src.api.event_routes import router as event_router
 from src.api.routes import router
 from src.api.source_routes import router as source_router
 from src.core.config import settings
-from src.core.env import load_env
 from src.core.state import app_state
 from src.db.startup import prepare_database
 from src.services.event_processor import (
@@ -28,8 +28,6 @@ from src.services.event_processor import (
     run_forever,
     worker_enabled,
 )
-
-load_env()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
