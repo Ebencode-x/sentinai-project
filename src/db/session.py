@@ -9,11 +9,23 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.config import settings
 
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
-    pool_pre_ping=True,
-)
+
+def _require_postgres_url() -> str:
+    url = (settings.database_url or "").strip()
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. SentinAI needs a PostgreSQL URL such as "
+            "postgresql+psycopg2://user:password@host:5432/dbname"
+        )
+    if not url.startswith("postgresql"):
+        raise RuntimeError(
+            "DATABASE_URL must start with postgresql:// or postgresql+psycopg2:// "
+            "(SQLite is not supported)"
+        )
+    return url
+
+
+engine = create_engine(_require_postgres_url(), pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

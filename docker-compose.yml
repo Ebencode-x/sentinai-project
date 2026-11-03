@@ -7,12 +7,11 @@ services:
     env_file:
       - .env
     environment:
-      # Keep the SQLite database on a named volume so accounts survive restarts.
-      DATABASE_URL: sqlite:////app/data/sentinai.db
+      # Postgres from the postgres service below; accounts live in its named volume.
+      DATABASE_URL: postgresql+psycopg2://sentinai:sentinai@postgres:5432/sentinai
     volumes:
       # Mount logs directory - persists outside container
       - ./logs:/app/logs
-      - sentinai-data:/app/data
     ports:
       # The image listens on 7860 inside the container; the API is on localhost:8000.
       - "8000:7860"
@@ -24,8 +23,27 @@ services:
       retries: 3
       start_period: 15s
     depends_on:
+      postgres:
+        condition: service_healthy
       vulnerable-app:
         condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinai-postgres
+    environment:
+      # Local development only. The port is not published to the host.
+      POSTGRES_USER: sentinai
+      POSTGRES_PASSWORD: sentinai
+      POSTGRES_DB: sentinai
+    volumes:
+      - sentinai-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinai -d sentinai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   vulnerable-app:
     build:
@@ -39,4 +57,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  sentinai-data:
+  sentinai-pgdata:
