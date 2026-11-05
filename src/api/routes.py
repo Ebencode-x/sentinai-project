@@ -120,6 +120,8 @@ def incidents() -> list[dict]:
                 "description": inc.stacktrace or tl,
                 "status": "open",
                 "source": inc.source or (tl.split(".")[0] if "." in tl else "sentinai"),
+                "last_seen": (inc.last_seen_at or inc.detected_at_utc).isoformat(),
+                "occurrences": inc.occurrence_count,
             }
         )
     return out

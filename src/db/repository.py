@@ -113,6 +113,8 @@ def _to_incident(row: Incident) -> LogIncident:
         stacktrace=row.stacktrace,
         context_before_error=row.context_before_error,
         source=row.source,
+        last_seen_at=row.last_seen_at,
+        occurrence_count=row.occurrence_count,
     )
 
 
@@ -121,7 +123,7 @@ def list_incidents(db: Session, account_id: str, limit: int) -> list[LogIncident
     stmt = (
         select(Incident)
         .where(Incident.account_id == account_id)
-        .order_by(Incident.detected_at.desc(), Incident.id.desc())
+        .order_by(Incident.last_seen_at.desc(), Incident.id.desc())
         .limit(limit)
     )
     return [_to_incident(row) for row in reversed(db.execute(stmt).scalars().all())]

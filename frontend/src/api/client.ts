@@ -52,6 +52,8 @@ export interface Incident {
   timestamp: string;
   status: "open" | "resolved";
   source?: string;
+  last_seen?: string;
+  occurrences?: number;
 }
 
 export interface Suggestion {
