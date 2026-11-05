@@ -19,6 +19,12 @@ class LogIncident(BaseModel):
     stacktrace: str
     context_before_error: str = ""
     source: str | None = Field(default=None, description="Service that reported it, if known.")
+    last_seen_at: datetime | None = Field(
+        default=None, description="Latest time this incident was seen."
+    )
+    occurrence_count: int = Field(
+        default=1, ge=1, description="How many times this incident was seen."
+    )
 
 
 class RemediationSuggestion(BaseModel):

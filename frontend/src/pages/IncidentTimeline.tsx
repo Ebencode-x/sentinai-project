@@ -1,15 +1,13 @@
 import { Fragment, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
+import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ChevronRight, RefreshCw } from "lucide-react";
 import { api } from "@/api/client";
+import type { Incident } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/Toast";
 import { Card } from "@/components/Card";
 import StatCard from "@/components/StatCard";
-import SeverityBadge from "@/components/SeverityBadge";
-
-const SEV_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -21,12 +19,39 @@ const FILTERS = [
   { key: "low", label: "Low" },
 ];
 
-function fmt(ts: string): string {
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: "var(--red)",
+  high: "var(--amber)",
+  medium: "var(--text-secondary)",
+  low: "var(--green)",
+};
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function exact(ts: string): string {
   try {
-    return format(parseISO(ts), "MMM d, HH:mm:ss");
+    return format(parseISO(ts), "MMM d, yyyy, HH:mm:ss");
   } catch {
     return ts;
   }
+}
+
+function ago(ts: string): string {
+  try {
+    return formatDistanceToNow(parseISO(ts), { addSuffix: true });
+  } catch {
+    return ts;
+  }
+}
+
+function lastSeen(i: Incident): string {
+  return i.last_seen ?? i.timestamp;
+}
+
+function occurrences(i: Incident): number {
+  return i.occurrences ?? 1;
 }
 
 export default function IncidentTimeline() {
@@ -64,9 +89,7 @@ export default function IncidentTimeline() {
 
   const rows = useMemo(() => {
     const sorted = [...incidents].sort(
-      (a, b) =>
-        (SEV_ORDER[a.severity] ?? 4) - (SEV_ORDER[b.severity] ?? 4) ||
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      (a, b) => new Date(lastSeen(b)).getTime() - new Date(lastSeen(a)).getTime()
     );
     return filter === "all" ? sorted : sorted.filter((i) => i.severity === filter || i.status === filter);
   }, [incidents, filter]);
@@ -76,7 +99,7 @@ export default function IncidentTimeline() {
   const avg = stats?.llm_metrics?.avg_latency_ms ?? stats?.avg_latency_ms ?? null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 tabular-nums">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Incidents</h1>
@@ -149,12 +172,13 @@ export default function IncidentTimeline() {
                   <th className="text-left font-medium text-xs px-2 py-2">Title</th>
                   <th className="text-left font-medium text-xs px-2 py-2 w-28">Severity</th>
                   <th className="text-left font-medium text-xs px-2 py-2 w-28">Status</th>
-                  <th className="text-right font-medium text-xs px-4 py-2 w-40">Detected</th>
+                  <th className="text-right font-medium text-xs px-4 py-2 w-40">Last seen</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((inc) => {
                   const open = openId === inc.id;
+                  const n = occurrences(inc);
                   return (
                     <Fragment key={inc.id}>
                       <tr
@@ -171,43 +195,59 @@ export default function IncidentTimeline() {
                         </td>
                         <td className="px-2 py-3 max-w-0">
                           <p className="truncate font-medium">{inc.title}</p>
-                          {inc.source && (
-                            <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>{inc.source}</p>
-                          )}
+                          <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                            {inc.source ?? "sentinai"}
+                            <span className="ml-3">
+                              {n} {n === 1 ? "occurrence" : "occurrences"}
+                            </span>
+                          </p>
                         </td>
-                        <td className="px-2 py-3"><SeverityBadge level={inc.severity} /></td>
                         <td className="px-2 py-3">
-                          <span className="inline-flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                            <span
-                              className="w-2 h-2 rounded-full"
-                              style={{ background: inc.status === "open" ? "var(--amber)" : "var(--green)" }}
-                            />
+                          <span
+                            className="text-xs font-medium"
+                            style={{ color: SEVERITY_COLOR[inc.severity] ?? "var(--text-secondary)" }}
+                          >
+                            {capitalize(inc.severity)}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3">
+                          <span
+                            className="text-xs"
+                            style={{ color: inc.status === "open" ? "var(--text-secondary)" : "var(--green)" }}
+                          >
                             {inc.status === "open" ? "Open" : "Resolved"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right text-xs" style={{ color: "var(--text-muted)" }}>
-                          {fmt(inc.timestamp)}
+                          <span title={exact(lastSeen(inc))}>{ago(lastSeen(inc))}</span>
                         </td>
                       </tr>
                       {open && (
                         <tr style={{ background: "var(--bg-base)" }}>
                           <td colSpan={5} className="px-4 py-4">
-                            <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Details</p>
+                            <dl className="grid grid-cols-[110px_1fr] gap-y-1.5 text-xs">
+                              <dt style={{ color: "var(--text-muted)" }}>First seen</dt>
+                              <dd>{exact(inc.timestamp)}</dd>
+                              <dt style={{ color: "var(--text-muted)" }}>Last seen</dt>
+                              <dd>{exact(lastSeen(inc))}</dd>
+                              <dt style={{ color: "var(--text-muted)" }}>Occurrences</dt>
+                              <dd>{n}</dd>
+                              <dt style={{ color: "var(--text-muted)" }}>Source</dt>
+                              <dd>{inc.source ?? "sentinai"}</dd>
+                              <dt style={{ color: "var(--text-muted)" }}>ID</dt>
+                              <dd className="break-all">{inc.id}</dd>
+                            </dl>
+                            <p className="text-xs mt-4 mb-1" style={{ color: "var(--text-muted)" }}>Details</p>
                             <pre
                               className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap wrap-break-word"
                               style={{
                                 background: "var(--bg-panel)",
                                 border: "1px solid var(--border)",
                                 color: "var(--text-secondary)",
-                                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
                               }}
                             >
                               {inc.description}
                             </pre>
-                            <p className="text-xs mt-3 break-all" style={{ color: "var(--text-muted)" }}>
-                              ID: {inc.id}
-                              {inc.source ? `  ·  Source: ${inc.source}` : ""}
-                            </p>
                           </td>
                         </tr>
                       )}
