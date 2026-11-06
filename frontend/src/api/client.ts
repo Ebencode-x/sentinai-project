@@ -54,6 +54,8 @@ export interface Incident {
   source?: string;
   last_seen?: string;
   occurrences?: number;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
 }
 
 export interface Suggestion {
@@ -176,6 +178,8 @@ export const api = {
   },
   stats: () => http.get<StatsSnapshot>("/stats"),
   incidents: () => http.get<Incident[]>("/incidents"),
+  resolveIncident: (id: string) => http.post(`/incidents/${encodeURIComponent(id)}/resolve`),
+  reopenIncident: (id: string) => http.post(`/incidents/${encodeURIComponent(id)}/reopen`),
   suggestions: () => http.get<Suggestion[]>("/suggestions"),
   suggestionLatest: () => http.get<Suggestion>("/suggestions/latest"),
   scanNow: () => http.post<{ detected_incidents: number }>("/scan-now"),

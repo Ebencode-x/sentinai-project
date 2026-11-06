@@ -7,7 +7,7 @@ working when a deployment moves from one account to many.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -48,6 +48,18 @@ def _count_repeat(db: Session, account_id: str, fingerprint: str, seen_at: datet
                 (Incident.last_seen_at < seen_at, seen_at), else_=Incident.last_seen_at
             ),
         )
+        .execution_options(synchronize_session=False)
+    )
+    # A repeat seen after the resolve time means the error is back, so reopen it.
+    db.execute(
+        update(Incident)
+        .where(
+            Incident.account_id == account_id,
+            Incident.fingerprint == fingerprint,
+            Incident.status == "resolved",
+            Incident.resolved_at < seen_at,
+        )
+        .values(status="open", resolved_at=None, resolved_by=None)
         .execution_options(synchronize_session=False)
     )
 
@@ -115,7 +127,30 @@ def _to_incident(row: Incident) -> LogIncident:
         source=row.source,
         last_seen_at=row.last_seen_at,
         occurrence_count=row.occurrence_count,
+        status=row.status,
+        resolved_at=row.resolved_at,
+        resolved_by=row.resolved_by,
     )
+
+
+def set_incident_status(
+    db: Session, account_id: str, fingerprint: str, status: str, user_email: str | None
+) -> bool:
+    """Resolve or reopen one incident. Returns False when it does not exist."""
+    if status == "resolved":
+        values = {"status": "resolved", "resolved_at": datetime.now(UTC), "resolved_by": user_email}
+    elif status == "open":
+        values = {"status": "open", "resolved_at": None, "resolved_by": None}
+    else:
+        raise ValueError(f"unknown incident status: {status}")
+    result = db.execute(
+        update(Incident)
+        .where(Incident.account_id == account_id, Incident.fingerprint == fingerprint)
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    return result.rowcount > 0
 
 
 def list_incidents(db: Session, account_id: str, limit: int) -> list[LogIncident]:

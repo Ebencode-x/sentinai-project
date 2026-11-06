@@ -15,8 +15,6 @@ const FILTERS = [
   { key: "resolved", label: "Resolved" },
   { key: "critical", label: "Critical" },
   { key: "high", label: "High" },
-  { key: "medium", label: "Medium" },
-  { key: "low", label: "Low" },
 ];
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -85,6 +83,16 @@ export default function IncidentTimeline() {
       );
     },
     onError: () => toast("Scan failed", "error"),
+  });
+
+  const statusMut = useMutation({
+    mutationFn: ({ id, resolve }: { id: string; resolve: boolean }) =>
+      resolve ? api.resolveIncident(id) : api.reopenIncident(id),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      toast(vars.resolve ? "Incident resolved" : "Incident reopened", "ok");
+    },
+    onError: () => toast("Could not update the incident", "error"),
   });
 
   const rows = useMemo(() => {
@@ -236,7 +244,28 @@ export default function IncidentTimeline() {
                               <dd>{inc.source ?? "sentinai"}</dd>
                               <dt style={{ color: "var(--text-muted)" }}>ID</dt>
                               <dd className="break-all">{inc.id}</dd>
+                              {inc.status === "resolved" && inc.resolved_at && (
+                                <>
+                                  <dt style={{ color: "var(--text-muted)" }}>Resolved</dt>
+                                  <dd>
+                                    {exact(inc.resolved_at)}
+                                    {inc.resolved_by ? ` by ${inc.resolved_by}` : ""}
+                                  </dd>
+                                </>
+                              )}
                             </dl>
+                            {user?.role === "admin" && (
+                              <button
+                                onClick={() =>
+                                  statusMut.mutate({ id: inc.id, resolve: inc.status === "open" })
+                                }
+                                disabled={statusMut.isPending}
+                                className="mt-4 text-xs font-medium hover:underline disabled:opacity-60"
+                                style={{ color: "var(--brand)" }}
+                              >
+                                {inc.status === "open" ? "Mark as resolved" : "Reopen"}
+                              </button>
+                            )}
                             <p className="text-xs mt-4 mb-1" style={{ color: "var(--text-muted)" }}>Details</p>
                             <pre
                               className="text-xs rounded-md p-3 overflow-x-auto whitespace-pre-wrap wrap-break-word"

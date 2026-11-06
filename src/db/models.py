@@ -146,6 +146,9 @@ class Incident(Base):
     stacktrace: Mapped[str] = mapped_column(Text, default="")
     context_before_error: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str | None] = mapped_column(String(64), default=None)
+    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    resolved_by: Mapped[str | None] = mapped_column(String(255), default=None)
 
 
 class Suggestion(Base):
