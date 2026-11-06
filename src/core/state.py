@@ -159,6 +159,14 @@ class AppState:
                 return []
             return repository.list_incidents(db, account_id, settings.max_recent_incidents)
 
+    def set_incident_status(self, incident_id: str, status: str, user_email: str | None) -> bool:
+        """Resolve or reopen one incident. Returns False when it is not found."""
+        with self.session_factory() as db:
+            account_id = self._resolve_account_id(db)
+            if account_id is None:
+                return False
+            return repository.set_incident_status(db, account_id, incident_id, status, user_email)
+
     def suggestions(self) -> list[RemediationSuggestion]:
         """The latest suggestions, oldest first."""
         with self.session_factory() as db:

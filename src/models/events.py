@@ -25,6 +25,9 @@ class LogIncident(BaseModel):
     occurrence_count: int = Field(
         default=1, ge=1, description="How many times this incident was seen."
     )
+    status: Literal["open", "resolved"] = "open"
+    resolved_at: datetime | None = None
+    resolved_by: str | None = None
 
 
 class RemediationSuggestion(BaseModel):

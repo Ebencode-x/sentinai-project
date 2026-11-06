@@ -118,13 +118,31 @@ def incidents() -> list[dict]:
                 "severity": "critical" if inc.severity == "critical" else "high",
                 "title": tl,
                 "description": inc.stacktrace or tl,
-                "status": "open",
+                "status": inc.status,
                 "source": inc.source or (tl.split(".")[0] if "." in tl else "sentinai"),
                 "last_seen": (inc.last_seen_at or inc.detected_at_utc).isoformat(),
                 "occurrences": inc.occurrence_count,
+                "resolved_at": inc.resolved_at.isoformat() if inc.resolved_at else None,
+                "resolved_by": inc.resolved_by,
             }
         )
     return out
+
+
+def _set_incident_status(incident_id: str, status: str, user) -> dict:
+    if not app_state.set_incident_status(incident_id, status, user.email):
+        raise HTTPException(status_code=404, detail="Incident not found.")
+    return {"id": incident_id, "status": status}
+
+
+@router.post("/incidents/{incident_id}/resolve", dependencies=_ADMIN_ONLY, tags=["incidents"])
+def resolve_incident(incident_id: str, user=Depends(require_admin)) -> dict:
+    return _set_incident_status(incident_id, "resolved", user)
+
+
+@router.post("/incidents/{incident_id}/reopen", dependencies=_ADMIN_ONLY, tags=["incidents"])
+def reopen_incident(incident_id: str, user=Depends(require_admin)) -> dict:
+    return _set_incident_status(incident_id, "open", user)
 
 
 @router.get("/suggestions", dependencies=_PROTECTED, tags=["incidents"])

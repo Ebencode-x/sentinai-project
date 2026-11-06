@@ -31,6 +31,9 @@ def test_to_incident_carries_recurrence_fields():
         source="agrolink",
         last_seen_at=LATEST,
         occurrence_count=6,
+        status="open",
+        resolved_at=None,
+        resolved_by=None,
     )
     incident = _to_incident(row)
     assert incident.last_seen_at == LATEST
