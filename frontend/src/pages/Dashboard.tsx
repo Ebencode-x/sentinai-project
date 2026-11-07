@@ -14,6 +14,7 @@ import type { Range } from "@/lib/activity";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import ActivityFeed from "@/components/ActivityFeed";
 import SystemCard from "@/components/SystemCard";
+import SourceActivity from "@/components/SourceActivity";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -86,6 +87,12 @@ export default function Dashboard() {
       />
 
       <NeedsAttention incidents={incidents} loading={incLoading} error={incError} />
+
+      <SourceActivity
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+      />
 
       <ActivityHeatmap />
 
