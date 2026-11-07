@@ -14,6 +14,8 @@ import type { Range } from "@/lib/activity";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import ActivityFeed from "@/components/ActivityFeed";
 import SystemCard from "@/components/SystemCard";
+import SourceActivity from "@/components/SourceActivity";
+import DayDetail from "@/components/DayDetail";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -26,6 +28,7 @@ export default function Dashboard() {
   const triggerScan = useSentinaiStore((s) => s.triggerScan);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [range, setRange] = useState<Range>(30);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const activity = useActivity();
 
   async function handleScan() {
@@ -87,7 +90,26 @@ export default function Dashboard() {
 
       <NeedsAttention incidents={incidents} loading={incLoading} error={incError} />
 
-      <ActivityHeatmap />
+      <SourceActivity
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+      />
+
+      <ActivityHeatmap
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+        selected={selectedDay}
+        onSelect={(d) => setSelectedDay((prev) => (prev === d ? null : d))}
+      />
+
+      <DayDetail
+        report={activity.data}
+        date={selectedDay}
+        incidents={incidents}
+        onClose={() => setSelectedDay(null)}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 flex flex-col">
