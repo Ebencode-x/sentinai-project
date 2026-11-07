@@ -15,6 +15,7 @@ import ActivityHeatmap from "@/components/ActivityHeatmap";
 import ActivityFeed from "@/components/ActivityFeed";
 import SystemCard from "@/components/SystemCard";
 import SourceActivity from "@/components/SourceActivity";
+import DayDetail from "@/components/DayDetail";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -101,6 +102,13 @@ export default function Dashboard() {
         error={activity.isError}
         selected={selectedDay}
         onSelect={(d) => setSelectedDay((prev) => (prev === d ? null : d))}
+      />
+
+      <DayDetail
+        report={activity.data}
+        date={selectedDay}
+        incidents={incidents}
+        onClose={() => setSelectedDay(null)}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

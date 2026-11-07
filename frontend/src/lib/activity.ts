@@ -60,3 +60,12 @@ export function activeSourcesSince(
     (s) => s.status === "active" && s.last_event_at && new Date(s.last_event_at).getTime() >= cutoff,
   ).length;
 }
+
+/** The UTC calendar day (yyyy-MM-dd) of a timestamp. A time without a zone is read as UTC. */
+export function utcDay(ts: string | null | undefined): string | null {
+  if (!ts) return null;
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(ts);
+  const ms = new Date(hasZone ? ts : `${ts}Z`).getTime();
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms).toISOString().slice(0, 10);
+}
