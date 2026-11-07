@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 import src.bootstrap  # noqa: F401
+from src.api.activity_routes import router as activity_router
 from src.api.audit_routes import router as audit_router
 from src.api.auth_routes import router as auth_router
 from src.api.chat import router as chat_router
@@ -110,6 +111,7 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(source_router, prefix="/api")
+app.include_router(activity_router, prefix="/api")
 app.include_router(event_router, prefix="/api")
 
 _frontend_dist = __import__("pathlib").Path(__file__).resolve().parent.parent / "frontend" / "dist"
