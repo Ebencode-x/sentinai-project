@@ -3,13 +3,14 @@ import { RefreshCw } from "lucide-react";
 import {
   useSentinaiStore,
   selectSortedIncidents,
-  selectCriticalCount,
   selectOpenCount,
 } from "@/store/sentinai";
 import { useAuth } from "@/hooks/useAuth";
-import StatCard from "@/components/StatCard";
-import IncidentsTable from "@/components/IncidentsTable";
-import SeverityDonut from "@/components/SeverityDonut";
+import OverviewSummary from "@/components/OverviewSummary";
+import EventsChart from "@/components/EventsChart";
+import NeedsAttention from "@/components/NeedsAttention";
+import { useActivity } from "@/hooks/useActivity";
+import type { Range } from "@/lib/activity";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import ActivityFeed from "@/components/ActivityFeed";
 import SystemCard from "@/components/SystemCard";
@@ -18,12 +19,14 @@ export default function Dashboard() {
   const { user } = useAuth();
   const incidents = useSentinaiStore(selectSortedIncidents);
   const incLoading = useSentinaiStore((s) => s.incidentsLoading);
+  const incError = useSentinaiStore((s) => s.incidentsError !== null);
   const stats = useSentinaiStore((s) => s.stats);
-  const critCount = useSentinaiStore(selectCriticalCount);
   const openCount = useSentinaiStore(selectOpenCount);
   const scanning = useSentinaiStore((s) => s.scanning);
   const triggerScan = useSentinaiStore((s) => s.triggerScan);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [range, setRange] = useState<Range>(30);
+  const activity = useActivity();
 
   async function handleScan() {
     setScanMsg(null);
@@ -38,8 +41,6 @@ export default function Dashboard() {
       setScanMsg("Scan failed");
     }
   }
-
-  const fallbackPct = Math.round((stats?.llm_metrics?.fallback_rate ?? 0) * 100);
 
   return (
     <div className="flex flex-col gap-4">
@@ -68,25 +69,23 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Open incidents" value={openCount} />
-        <StatCard label="Critical" value={critCount} accent={critCount > 0} color="red" />
-        <StatCard label="Scan runs" value={stats?.total_scan_runs ?? 0} />
-        <StatCard
-          label="Fallback rate"
-          value={`${fallbackPct}%`}
-          accent={fallbackPct > 20}
-          color="amber"
-          sub="Share of suggestions that used the fallback"
-        />
-      </div>
+      <OverviewSummary
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+        openCount={openCount}
+        range={range}
+        onRange={setRange}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <IncidentsTable incidents={incidents} loading={incLoading} />
-        </div>
-        <SeverityDonut incidents={incidents} />
-      </div>
+      <EventsChart
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+        range={range}
+      />
+
+      <NeedsAttention incidents={incidents} loading={incLoading} error={incError} />
 
       <ActivityHeatmap />
 

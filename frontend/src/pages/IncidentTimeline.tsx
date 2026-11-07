@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ChevronRight, RefreshCw } from "lucide-react";
@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/Toast";
 import { Card } from "@/components/Card";
 import StatCard from "@/components/StatCard";
+import { useSearchParams } from "react-router";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -57,7 +58,9 @@ export default function IncidentTimeline() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [filter, setFilter] = useState("all");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const wantedId = searchParams.get("open");
+  const [openId, setOpenId] = useState<string | null>(wantedId);
 
   const { data: incidents = [], isLoading, isError } = useQuery({
     queryKey: ["incidents"],
@@ -101,6 +104,13 @@ export default function IncidentTimeline() {
     );
     return filter === "all" ? sorted : sorted.filter((i) => i.severity === filter || i.status === filter);
   }, [incidents, filter]);
+
+  useEffect(() => {
+    if (!wantedId || isLoading) return;
+    document
+      .getElementById(`incident-${wantedId}`)
+      ?.scrollIntoView({ block: "center" });
+  }, [wantedId, isLoading]);
 
   const critCount = incidents.filter((i) => i.severity === "critical").length;
   const openCount = incidents.filter((i) => i.status === "open").length;
@@ -190,7 +200,7 @@ export default function IncidentTimeline() {
                   return (
                     <Fragment key={inc.id}>
                       <tr
-                        onClick={() => setOpenId(open ? null : inc.id)}
+                        id={`incident-${inc.id}`} onClick={() => setOpenId(open ? null : inc.id)}
                         className="cursor-pointer transition-colors hover:bg-(--bg-panel)"
                         style={{ borderTop: "1px solid var(--border)", background: open ? "var(--bg-panel)" : undefined }}
                       >
