@@ -7,6 +7,7 @@ import {
 } from "@/store/sentinai";
 import { useAuth } from "@/hooks/useAuth";
 import OverviewSummary from "@/components/OverviewSummary";
+import EventsChart from "@/components/EventsChart";
 import { useActivity } from "@/hooks/useActivity";
 import type { Range } from "@/lib/activity";
 import IncidentsTable from "@/components/IncidentsTable";
@@ -75,6 +76,13 @@ export default function Dashboard() {
         openCount={openCount}
         range={range}
         onRange={setRange}
+      />
+
+      <EventsChart
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+        range={range}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
