@@ -27,6 +27,7 @@ export default function Dashboard() {
   const triggerScan = useSentinaiStore((s) => s.triggerScan);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [range, setRange] = useState<Range>(30);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const activity = useActivity();
 
   async function handleScan() {
@@ -94,7 +95,13 @@ export default function Dashboard() {
         error={activity.isError}
       />
 
-      <ActivityHeatmap />
+      <ActivityHeatmap
+        report={activity.data}
+        loading={activity.isLoading}
+        error={activity.isError}
+        selected={selectedDay}
+        onSelect={(d) => setSelectedDay((prev) => (prev === d ? null : d))}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 flex flex-col">
