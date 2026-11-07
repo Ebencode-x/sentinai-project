@@ -8,10 +8,9 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import OverviewSummary from "@/components/OverviewSummary";
 import EventsChart from "@/components/EventsChart";
+import NeedsAttention from "@/components/NeedsAttention";
 import { useActivity } from "@/hooks/useActivity";
 import type { Range } from "@/lib/activity";
-import IncidentsTable from "@/components/IncidentsTable";
-import SeverityDonut from "@/components/SeverityDonut";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import ActivityFeed from "@/components/ActivityFeed";
 import SystemCard from "@/components/SystemCard";
@@ -20,6 +19,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const incidents = useSentinaiStore(selectSortedIncidents);
   const incLoading = useSentinaiStore((s) => s.incidentsLoading);
+  const incError = useSentinaiStore((s) => s.incidentsError !== null);
   const stats = useSentinaiStore((s) => s.stats);
   const openCount = useSentinaiStore(selectOpenCount);
   const scanning = useSentinaiStore((s) => s.scanning);
@@ -85,12 +85,7 @@ export default function Dashboard() {
         range={range}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <IncidentsTable incidents={incidents} loading={incLoading} />
-        </div>
-        <SeverityDonut incidents={incidents} />
-      </div>
+      <NeedsAttention incidents={incidents} loading={incLoading} error={incError} />
 
       <ActivityHeatmap />
 
