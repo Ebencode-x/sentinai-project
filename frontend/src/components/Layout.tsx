@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router";
+import { Outlet, NavLink, Link, useNavigate } from "react-router";
 import { LogOut } from "lucide-react";
 import ThemeIcon from "@/components/ThemeIcon";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,10 +43,10 @@ export default function Layout() {
         style={{ background: "var(--bg-surface)", borderBottom: "1px solid var(--border)" }}
       >
         <div className="h-full max-w-[1200px] mx-auto px-4 flex items-center gap-6">
-          <div className="flex items-center gap-2 shrink-0">
-            <img src="/apple-touch-icon.png" alt="SentinAI" className="w-7 h-7 rounded-md" />
+          <Link to="/dashboard" className="flex items-center gap-2 shrink-0 transition-opacity hover:opacity-80">
+            <img src="/apple-touch-icon.png" alt="" className="w-7 h-7 rounded-md" />
             <span className="text-[15px] font-semibold tracking-tight">SentinAI</span>
-          </div>
+          </Link>
 
           <nav className="flex items-center gap-1 overflow-x-auto min-w-0">
             {NAV.map(({ to, label }) => (
