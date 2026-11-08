@@ -69,6 +69,13 @@ export default function Layout() {
 
           <div className="ml-auto flex items-center gap-1 shrink-0">
             <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("sentinai:assistant-toggle"))}
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)"
+            >
+              Assistant
+            </button>
+            <button
               onClick={toggle}
               title={theme === "dark" ? "Light mode" : "Dark mode"}
               className="w-8 h-8 rounded-md flex items-center justify-center transition-colors text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover)"

@@ -6,7 +6,9 @@ import { useHoverTip } from "@/hooks/useHoverTip";
 import { dayLabel } from "@/lib/activity";
 import type { ActivityReport, DayActivity } from "@/api/activity";
 
-const CELL = 12;
+const CELL_MIN = 12;
+const CELL_MAX = 22;
+const LABEL_COL = 28;
 const GAP = 3;
 const LEVEL_PCT = [0, 30, 50, 75, 100];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -48,6 +50,7 @@ export default function ActivityHeatmap({ report, loading, error, selected, onSe
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
   const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
+  const [cell, setCell] = useState(CELL_MIN);
   const daily = report?.daily;
 
   const layout = useMemo(() => {
@@ -78,6 +81,19 @@ export default function ActivityHeatmap({ report, loading, error, selected, onSe
   const cols = layout?.cols ?? 0;
   const count = layout?.cells.length ?? 0;
   const activeIdx = focusIdx ?? count - 1;
+
+  // Fit the cell size to the card width. The observer also fires once when it starts.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || cols === 0) return;
+    const fit = () => {
+      const room = el.clientWidth - LABEL_COL - cols * GAP;
+      setCell(Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor(room / cols))));
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [cols, loading, error]);
 
   // Start scrolled to the right so today is visible on narrow screens.
   useEffect(() => {
@@ -135,8 +151,8 @@ export default function ActivityHeatmap({ report, loading, error, selected, onSe
             aria-label="Daily activity heatmap"
             className="grid"
             style={{
-              gridTemplateColumns: `28px repeat(${layout.cols}, ${CELL}px)`,
-              gridTemplateRows: `14px repeat(7, ${CELL}px)`,
+              gridTemplateColumns: `${LABEL_COL}px repeat(${layout.cols}, ${cell}px)`,
+              gridTemplateRows: `14px repeat(7, ${cell}px)`,
               gap: GAP,
               width: "max-content",
             }}
@@ -154,7 +170,7 @@ export default function ActivityHeatmap({ report, loading, error, selected, onSe
               <span
                 key={label}
                 className="text-[11px]"
-                style={{ gridRow: row + 2, gridColumn: 1, lineHeight: `${CELL}px`, color: "var(--text-muted)" }}
+                style={{ gridRow: row + 2, gridColumn: 1, lineHeight: `${cell}px`, color: "var(--text-muted)" }}
               >
                 {label}
               </span>
@@ -206,7 +222,7 @@ export default function ActivityHeatmap({ report, loading, error, selected, onSe
               <span
                 key={l}
                 className="inline-block rounded-[3px]"
-                style={{ width: CELL, height: CELL, background: fill(l) }}
+                style={{ width: cell, height: cell, background: fill(l) }}
               />
             ))}
             <span>More</span>
