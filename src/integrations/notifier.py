@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from src.core.envparse import env_float
 from src.core.url_guard import UnsafeUrlError, validate_channel_url
 from src.models.events import LogIncident, RemediationSuggestion
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 SLACK_WEBHOOK_URL: str = os.getenv("SENTINAI_SLACK_WEBHOOK_URL", "")
 GENERIC_WEBHOOK_URL: str = os.getenv("SENTINAI_GENERIC_WEBHOOK_URL", "")
-NOTIFICATION_TIMEOUT: float = float(os.getenv("NOTIFICATION_TIMEOUT_SECONDS", "8"))
+NOTIFICATION_TIMEOUT: float = env_float("NOTIFICATION_TIMEOUT_SECONDS", 8.0, minimum=0.1)
 
 
 def notify(
