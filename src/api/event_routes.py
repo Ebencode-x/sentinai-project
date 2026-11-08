@@ -9,7 +9,6 @@ redeploy, and a retry with the same event_id is not counted twice.
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -21,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from src.core.envparse import env_int
 from src.core.fingerprint import fingerprint
 from src.core.rate_limiter import TokenBucket
 from src.core.scrub import scrub
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/v1/events", tags=["events"])
 MAX_BODY_BYTES = 256 * 1024
 MAX_EVENTS = 100
 MAX_FUTURE = timedelta(minutes=5)
-_RATE_PER_MINUTE = int(os.getenv("SENTINAI_EVENTS_RATE_LIMIT", "120"))
+_RATE_PER_MINUTE = env_int("SENTINAI_EVENTS_RATE_LIMIT", 120, minimum=1)
 
 _limiters: dict[str, TokenBucket] = {}
 _limiters_lock = threading.Lock()

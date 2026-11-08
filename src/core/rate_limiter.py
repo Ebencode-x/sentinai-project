@@ -12,15 +12,16 @@ Architecture:
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from typing import Protocol, runtime_checkable
 
+from src.core.envparse import env_int
+
 logger = logging.getLogger(__name__)
 
-_LLM_MAX_PER_MINUTE: int = int(os.getenv("SENTINAI_LLM_RATE_LIMIT", "10"))
-_PR_MAX_PER_MINUTE: int = int(os.getenv("SENTINAI_PR_RATE_LIMIT", "3"))
+_LLM_MAX_PER_MINUTE: int = env_int("SENTINAI_LLM_RATE_LIMIT", 10, minimum=1)
+_PR_MAX_PER_MINUTE: int = env_int("SENTINAI_PR_RATE_LIMIT", 3, minimum=1)
 
 
 @runtime_checkable

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from src.core.audit import AuditLogger, SessionFactory, audit_logger
-from src.core.config import settings
+from src.core.config import AUTONOMY_MODES, settings
 from src.core.crypto import KEY_ENV, MASK_MARK, SecretKeyError, decrypt, encrypt, mask_url
 from src.core.metrics import metrics
 from src.core.url_guard import validate_channel_url
@@ -21,8 +21,6 @@ from src.services.remediation_engine import RemediationEngine
 from src.services.watcher import LogWatcher, WatcherConfig
 
 logger = logging.getLogger(__name__)
-
-AUTONOMY_MODES = ("propose_only", "auto_pr")
 
 
 @dataclass
