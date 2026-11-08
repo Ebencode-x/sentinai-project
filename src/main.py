@@ -21,6 +21,7 @@ from src.api.event_routes import router as event_router
 from src.api.routes import router
 from src.api.source_routes import router as source_router
 from src.core.config import settings
+from src.core.env_check import enforce_env
 from src.core.state import app_state
 from src.db.startup import prepare_database
 from src.services.event_processor import (
@@ -54,6 +55,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Refuse to start on settings that do not fit together, naming every problem.
+    enforce_env(settings)
     # Create/upgrade the auth tables and make sure a first admin exists, so that a
     # fresh clone (or a fresh database) can log in without any manual steps.
     prepare_database()
