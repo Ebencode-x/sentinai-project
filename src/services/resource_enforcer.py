@@ -8,19 +8,19 @@ All violations are collected and reported together (not one-by-one).
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 
+from src.core.envparse import env_float, env_int
 from src.services.sandbox_config import SandboxConfig
 
 logger = logging.getLogger(__name__)
 
-_HARD_MAX_MEMORY_MB: int = int(os.getenv("SENTINAI_SANDBOX_MAX_MEMORY_MB", "1024"))
-_HARD_MAX_CPUS: float = float(os.getenv("SENTINAI_SANDBOX_MAX_CPUS", "2.0"))
-_HARD_MAX_TIMEOUT_S: int = int(os.getenv("SENTINAI_SANDBOX_MAX_TIMEOUT_S", "300"))
-_HARD_MAX_TMPFS_MB: int = int(os.getenv("SENTINAI_SANDBOX_MAX_TMPFS_MB", "256"))
 _MIN_MEMORY_MB: int = 64
 _MIN_TIMEOUT_S: int = 10
+_HARD_MAX_MEMORY_MB: int = env_int("SENTINAI_SANDBOX_MAX_MEMORY_MB", 1024, minimum=_MIN_MEMORY_MB)
+_HARD_MAX_CPUS: float = env_float("SENTINAI_SANDBOX_MAX_CPUS", 2.0, minimum=0.1)
+_HARD_MAX_TIMEOUT_S: int = env_int("SENTINAI_SANDBOX_MAX_TIMEOUT_S", 300, minimum=_MIN_TIMEOUT_S)
+_HARD_MAX_TMPFS_MB: int = env_int("SENTINAI_SANDBOX_MAX_TMPFS_MB", 256, minimum=1)
 
 
 @dataclass(frozen=True)
