@@ -27,6 +27,18 @@ fail() { echo "SMOKE FAIL: $1" >&2; echo "--- server log ---" >&2; tail -25 "$LO
 
 DB_URL="$("$PY" scripts/pg_schema.py create "$BASE_URL" "$SCHEMA")"
 
+# 0. Settings that do not fit together stop the start and are named in the log.
+set +e
+env -i PATH="$PATH" HOME="$WORK" \
+  DATABASE_URL="$DB_URL" LOG_FILE_PATH="$WORK/app.log" \
+  SENTINAI_ENV_FILE="$WORK/no-such.env" AUTONOMY_MODE=auto_pr \
+  timeout 120 "$PY" -m uvicorn src.main:app --port "$PORT" > "$LOG" 2>&1
+BAD_CODE=$?
+set -e
+[ "$BAD_CODE" -ne 124 ] || fail "server kept running with AUTONOMY_MODE=auto_pr and no GITHUB_TOKEN"
+[ "$BAD_CODE" -ne 0 ] || fail "server exited cleanly with AUTONOMY_MODE=auto_pr and no GITHUB_TOKEN"
+grep -q "GITHUB_TOKEN" "$LOG" || fail "startup error did not name GITHUB_TOKEN"
+
 start_server() {
   : > "$LOG"
   env -i PATH="$PATH" HOME="$WORK" \
