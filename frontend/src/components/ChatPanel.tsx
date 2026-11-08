@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageSquare, Send, X } from "lucide-react";
+import { Send } from "lucide-react";
 import { getStoredToken } from "@/hooks/useAuth";
 
 interface Message {
@@ -32,6 +32,13 @@ export default function ChatPanel() {
 
   // Stop any running stream when the panel unmounts (for example on sign out).
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // The top bar button in Layout asks the assistant to open or close.
+  useEffect(() => {
+    const toggle = () => setOpen((o) => !o);
+    window.addEventListener("sentinai:assistant-toggle", toggle);
+    return () => window.removeEventListener("sentinai:assistant-toggle", toggle);
+  }, []);
 
   async function send() {
     const q = input.trim();
@@ -125,19 +132,9 @@ export default function ChatPanel() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label={open ? "Close assistant" : "Open assistant"}
-        aria-expanded={open}
-        className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-105"
-        style={{ background: "var(--brand)", color: "#1a1a1a", boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}
-      >
-        {open ? <X size={20} /> : <MessageSquare size={20} />}
-      </button>
-
       {open && (
         <div
-          className="fixed bottom-24 right-6 z-40 flex flex-col overflow-hidden rounded-lg w-[min(380px,calc(100vw-3rem))] h-[min(520px,calc(100vh-8rem))]"
+          className="fixed bottom-6 right-6 z-40 flex flex-col overflow-hidden rounded-lg w-[min(380px,calc(100vw-3rem))] h-[min(520px,calc(100vh-8rem))]"
           style={{
             background: "var(--bg-surface)",
             border: "1px solid var(--border-strong)",
@@ -148,8 +145,14 @@ export default function ChatPanel() {
             className="flex items-center gap-2 px-4 h-12 shrink-0"
             style={{ borderBottom: "1px solid var(--border)" }}
           >
-            <span className="w-2 h-2 rounded-full" style={{ background: "var(--green)" }} />
             <span className="text-sm font-semibold">Assistant</span>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="ml-auto text-xs transition-colors text-(--text-secondary) hover:text-(--text-primary)"
+            >
+              Close
+            </button>
           </div>
 
           <div
