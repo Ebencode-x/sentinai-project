@@ -135,6 +135,15 @@ BUILT_IN_PATTERNS: tuple[SecretPattern, ...] = (
     _p("npm-token", r"npm_[A-Za-z0-9]{36}"),
     # PyPI tokens
     _p("pypi-token", r"pypi-[A-Za-z0-9_\-]{40,}"),
+    # SentinAI ingest keys
+    _p("sentinai-key", r"(?<![A-Za-z0-9])snl_[A-Za-z0-9_\-]{16,}"),
+    # Anthropic first, so its label wins over the general sk- rule below
+    _p("anthropic-key", r"(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_\-]{20,}"),
+    _p("openai-key", r"(?<![A-Za-z0-9])sk-(?:proj-|svcacct-)?[A-Za-z0-9_\-]{32,}"),
+    # Fine-grained GitHub tokens (the gh[pors]_ rule above does not cover them)
+    _p("github-pat", r"github_pat_[A-Za-z0-9_]{22,}"),
+    # Bearer tokens in headers
+    _p("bearer-token", r"(?i)\bbearer\s+[A-Za-z0-9._~+/=\-]{16,}"),
 )
 
 
