@@ -34,3 +34,16 @@ def redact_incident(incident: LogIncident) -> tuple[LogIncident, int]:
     if not updates:
         return incident, 0
     return incident.model_copy(update=updates), total
+
+
+# Ingest runs this on every event before it is fingerprinted and stored.
+# Entropy detection is off here: ids, hashes and request tokens are normal in
+# logs, and masking them would change fingerprints for no security gain.
+_INGEST_SANITIZER = SecretSanitizer(entropy_detection=False)
+
+
+def redact_known_secrets(text: str) -> str:
+    """Mask named key formats only (no entropy guessing). Safe for fingerprints."""
+    if not text:
+        return text
+    return _INGEST_SANITIZER.sanitize(text).text
