@@ -58,7 +58,6 @@ class AnthropicProvider(LLMProvider):
             kwargs: dict = dict(
                 model=request.model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
                 messages=messages,
             )
             if system:
@@ -83,7 +82,6 @@ class AnthropicProvider(LLMProvider):
             kwargs: dict = dict(
                 model=request.model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
                 messages=messages,
             )
             if system:
