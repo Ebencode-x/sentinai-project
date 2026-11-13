@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.models.events import LogIncident
+from src.services.incident_redaction import redact_incident
 
 # Numbers, hex ids and memory addresses differ on every occurrence of the same bug
 # (line numbers, row ids, request ids), so they are masked before hashing.
@@ -188,7 +189,7 @@ class LogWatcher:
         merged_text = "\n".join(block_lines)
         fingerprint = self._fingerprint(merged_text)
 
-        return LogIncident(
+        incident = LogIncident(
             incident_id=fingerprint,
             detected_at_utc=datetime.now(UTC),
             severity="critical",
@@ -200,6 +201,8 @@ class LogWatcher:
                 else context_lines
             ),
         )
+        redacted, _ = redact_incident(incident)
+        return redacted
 
     def _is_error_signal(self, line: str) -> bool:
         """Return True when a line matches one of our crash/error indicators."""
