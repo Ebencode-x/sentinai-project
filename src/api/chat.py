@@ -13,6 +13,7 @@ from sentinai.llm.factory import build_provider
 from src.api.deps import require_user
 from src.core.state import app_state
 from src.db.models import User
+from src.services.incident_redaction import redact_text
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,7 +31,7 @@ def _build_system_prompt(incidents: list, stats: dict) -> str:
     lines = []
     for i in incidents[:20]:
         sev = i.get("severity", "?").upper()
-        title = i.get("trigger_line") or i.get("title", "unknown")
+        title, _ = redact_text(str(i.get("trigger_line") or i.get("title", "unknown")))
         src = i.get("source", "?")
         st = i.get("status", "?")
         lines.append("  - [" + sev + "] " + title + " (source: " + src + ", status: " + st + ")")
@@ -117,6 +118,7 @@ async def chat(
     import re as _re
 
     question = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", question)
+    question, _ = redact_text(question)
 
     if not question.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty question.")

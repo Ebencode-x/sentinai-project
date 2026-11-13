@@ -27,6 +27,7 @@ from src.core.scrub import scrub
 from src.db import ingest as event_store
 from src.db import sources
 from src.db.session import get_db
+from src.services.incident_redaction import redact_known_secrets
 
 logger = logging.getLogger("sentinai.events")
 
@@ -97,9 +98,11 @@ def _unavailable() -> HTTPException:
 
 
 def _prepare(source_name: str, event: EventIn, now: datetime) -> event_store.NewEvent:
-    message = " ".join(scrub(event.message).split()) or "(empty message)"
-    stacktrace = scrub(event.stacktrace) if event.stacktrace else None
-    exception_type = scrub(event.exception_type) if event.exception_type else None
+    message = " ".join(scrub(redact_known_secrets(event.message)).split()) or "(empty message)"
+    stacktrace = scrub(redact_known_secrets(event.stacktrace)) if event.stacktrace else None
+    exception_type = (
+        scrub(redact_known_secrets(event.exception_type)) if event.exception_type else None
+    )
     occurred = event.timestamp or now
     if occurred.tzinfo is None:
         occurred = occurred.replace(tzinfo=UTC)

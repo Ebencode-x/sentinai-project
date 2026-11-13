@@ -12,6 +12,7 @@ from src.integrations import notifier
 from src.integrations.github_client import GitHubClient
 from src.integrations.llm_client import BaseLLMClient, StubLLMClient, build_llm_client
 from src.models.events import LogIncident, RemediationSuggestion
+from src.services.incident_redaction import redact_incident
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,13 @@ class RemediationEngine:
         self, incident: LogIncident, autonomy_mode: str = "propose_only"
     ) -> RemediationSuggestion:
         """Ask the configured LLM client for remediation guidance."""
+        incident, redacted = redact_incident(incident)
+        if redacted:
+            logger.warning(
+                "%d secret(s) redacted before analysis of incident %s",
+                redacted,
+                incident.incident_id,
+            )
         if not llm_rate_limiter.consume():
             logger.warning("LLM rate limit exceeded — returning stub fallback.")
             base = self._stub.analyze_incident(incident)

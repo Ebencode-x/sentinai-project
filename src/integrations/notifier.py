@@ -24,6 +24,7 @@ import httpx
 from src.core.envparse import env_float
 from src.core.url_guard import UnsafeUrlError, validate_channel_url
 from src.models.events import LogIncident, RemediationSuggestion
+from src.services.incident_redaction import redact_incident
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ def notify(
       warning  -> Slack only
     Errors are logged but never raised.
     """
+    incident, _ = redact_incident(incident)
     if channels:
         _notify_channels(incident, suggestion, channels)
         return
