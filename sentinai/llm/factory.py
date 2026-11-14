@@ -40,11 +40,13 @@ def build_provider(provider: str | None = None) -> LLMProvider:
 def _register_builtins() -> None:
     from sentinai.llm.anthropic import AnthropicProvider  # noqa: PLC0415
     from sentinai.llm.mock import MockProvider  # noqa: PLC0415
+    from sentinai.llm.openai_compat import OpenAICompatProvider  # noqa: PLC0415
     from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
 
     register_provider("anthropic", AnthropicProvider)
     register_provider("mock", MockProvider)
     register_provider("smart_stub", SmartStubProvider)
+    register_provider("openai_compat", OpenAICompatProvider)
 
 
 def _instantiate(name: str, cls: type[LLMProvider]) -> LLMProvider:
@@ -61,4 +63,11 @@ def _instantiate(name: str, cls: type[LLMProvider]) -> LLMProvider:
         return cls()  # type: ignore[call-arg]
     if name == "smart_stub":
         return cls()  # type: ignore[call-arg]
+    if name == "openai_compat":
+        key = os.getenv("LLM_API_KEY", "")
+        if not key:
+            from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
+
+            return SmartStubProvider()
+        return cls(api_key=key, base_url=os.getenv("LLM_BASE_URL", ""))  # type: ignore[call-arg]
     raise LLMProviderError(f"No instantiation rule for provider {name!r}.")
