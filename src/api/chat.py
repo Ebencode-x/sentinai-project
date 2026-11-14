@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from sentinai.llm.base import LLMMessage, LLMRequest, Role
-from sentinai.llm.exceptions import LLMAuthError, LLMProviderError
+from sentinai.llm.exceptions import LLMAuthError, LLMError, LLMProviderError
 from sentinai.llm.factory import build_provider
 from src.api.deps import require_user
 from src.core.state import app_state
@@ -17,7 +18,7 @@ from src.services.incident_redaction import redact_text
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = os.getenv("SENTINAI_LLM_MODEL", "claude-haiku-4-5-20251001")
 _MAX_TOKENS = 1024
 
 
@@ -87,7 +88,7 @@ async def _stream_sse(question: str, system: str):
         async for chunk in provider.stream(request):
             payload = json.dumps({"token": chunk})
             yield ("data: " + payload + "\n\n").encode()
-    except LLMProviderError as exc:
+    except LLMError as exc:
         logger.error("[chat] stream error: %s", exc)
         yield ('data: {"error": "' + str(exc).replace('"', "") + '"}\n\n').encode()
     finally:
