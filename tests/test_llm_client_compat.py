@@ -13,8 +13,13 @@ def _set(monkeypatch, **kw):
 
 
 def test_openai_compat_uses_base_url_and_model(monkeypatch):
-    _set(monkeypatch, llm_provider="openai_compat", llm_api_key="k",
-         llm_base_url=GEMINI + "/", llm_model="gemini-3.5-flash-lite")
+    _set(
+        monkeypatch,
+        llm_provider="openai_compat",
+        llm_api_key="k",
+        llm_base_url=GEMINI + "/",
+        llm_model="gemini-3.5-flash-lite",
+    )
     client = lc.build_llm_client()
     assert isinstance(client, lc.OpenAILLMClient)
     assert client.chat_url == GEMINI + "/chat/completions"
@@ -22,14 +27,24 @@ def test_openai_compat_uses_base_url_and_model(monkeypatch):
 
 
 def test_openai_compat_rejects_non_https(monkeypatch):
-    _set(monkeypatch, llm_provider="openai_compat", llm_api_key="k",
-         llm_base_url="http://evil.test/v1", llm_model="m")
+    _set(
+        monkeypatch,
+        llm_provider="openai_compat",
+        llm_api_key="k",
+        llm_base_url="http://evil.test/v1",
+        llm_model="m",
+    )
     assert isinstance(lc.build_llm_client(), lc.StubLLMClient)
 
 
 def test_openai_compat_needs_model(monkeypatch):
-    _set(monkeypatch, llm_provider="openai_compat", llm_api_key="k",
-         llm_base_url=GEMINI, llm_model="")
+    _set(
+        monkeypatch,
+        llm_provider="openai_compat",
+        llm_api_key="k",
+        llm_base_url=GEMINI,
+        llm_model="",
+    )
     assert isinstance(lc.build_llm_client(), lc.StubLLMClient)
 
 
@@ -40,6 +55,7 @@ def test_plain_openai_keeps_default_url(monkeypatch):
 
 
 def test_env_check_flags_missing_base_url():
-    cfg = replace(settings, llm_provider="openai_compat", llm_api_key="k",
-                  llm_base_url="", llm_model="m")
+    cfg = replace(
+        settings, llm_provider="openai_compat", llm_api_key="k", llm_base_url="", llm_model="m"
+    )
     assert any("LLM_BASE_URL" in e for e in env_check.check_env(cfg).errors)

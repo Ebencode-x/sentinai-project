@@ -40,7 +40,9 @@ def check_env(cfg: Any) -> EnvReport:
     if cfg.llm_provider == "openai_compat":
         base = (getattr(cfg, "llm_base_url", "") or "").strip()
         if not base.startswith("https://"):
-            report.errors.append("LLM_PROVIDER=openai_compat needs LLM_BASE_URL starting with https://")
+            report.errors.append(
+                "LLM_PROVIDER=openai_compat needs LLM_BASE_URL starting with https://"
+            )
         if not (getattr(cfg, "llm_model", "") or "").strip():
             report.errors.append("LLM_PROVIDER=openai_compat needs LLM_MODEL")
 

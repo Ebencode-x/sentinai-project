@@ -221,9 +221,7 @@ def build_llm_client() -> BaseLLMClient:
     if provider == "openai_compat" and settings.llm_api_key:
         base = (settings.llm_base_url or "").strip().rstrip("/")
         if not base.startswith("https://") or not settings.llm_model:
-            logger.warning(
-                "openai_compat needs https LLM_BASE_URL and LLM_MODEL; using stub."
-            )
+            logger.warning("openai_compat needs https LLM_BASE_URL and LLM_MODEL; using stub.")
             return StubLLMClient()
         client = OpenAILLMClient(
             api_key=settings.llm_api_key,
