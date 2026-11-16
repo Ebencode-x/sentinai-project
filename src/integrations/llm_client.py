@@ -119,6 +119,8 @@ class StubLLMClient(BaseLLMClient):
 class OpenAILLMClient(BaseLLMClient):
     """OpenAI Chat Completions adapter with structured JSON output."""
 
+    chat_url = "https://api.openai.com/v1/chat/completions"
+
     def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
         self._api_key = api_key
         self._model = model or "gpt-4o-mini"
@@ -137,7 +139,7 @@ class OpenAILLMClient(BaseLLMClient):
         headers = {"Authorization": f"Bearer {self._api_key}"}
 
         body = _post_json_with_retry(
-            url="https://api.openai.com/v1/chat/completions",
+            url=self.chat_url,
             headers=headers,
             json_body=payload,
             timeout_seconds=self._timeout_seconds,
@@ -216,6 +218,18 @@ def build_llm_client() -> BaseLLMClient:
             model=settings.llm_model,
             timeout_seconds=settings.llm_timeout_seconds,
         )
+    if provider == "openai_compat" and settings.llm_api_key:
+        base = (settings.llm_base_url or "").strip().rstrip("/")
+        if not base.startswith("https://") or not settings.llm_model:
+            logger.warning("openai_compat needs https LLM_BASE_URL and LLM_MODEL; using stub.")
+            return StubLLMClient()
+        client = OpenAILLMClient(
+            api_key=settings.llm_api_key,
+            model=settings.llm_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+        client.chat_url = base + "/chat/completions"
+        return client
     return StubLLMClient()
 
 
