@@ -20,7 +20,7 @@ from src.core.envparse import ConfigError
 logger = logging.getLogger(__name__)
 
 _REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-_REAL_PROVIDERS = ("openai", "claude")
+_REAL_PROVIDERS = ("openai", "claude", "openai_compat")
 
 
 @dataclass
@@ -36,6 +36,13 @@ def check_env(cfg: Any) -> EnvReport:
         report.errors.append(
             f"LLM_PROVIDER={cfg.llm_provider} needs LLM_API_KEY (or ANTHROPIC_API_KEY)"
         )
+
+    if cfg.llm_provider == "openai_compat":
+        base = (getattr(cfg, "llm_base_url", "") or "").strip()
+        if not base.startswith("https://"):
+            report.errors.append("LLM_PROVIDER=openai_compat needs LLM_BASE_URL starting with https://")
+        if not (getattr(cfg, "llm_model", "") or "").strip():
+            report.errors.append("LLM_PROVIDER=openai_compat needs LLM_MODEL")
 
     repo = cfg.github_repo.strip()
     if repo and not _REPO_PATTERN.match(repo):

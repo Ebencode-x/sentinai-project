@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from src.core.envparse import env_choice, env_float, env_int
 
 AUTONOMY_MODES = ("propose_only", "auto_pr")
-LLM_PROVIDERS = ("stub", "openai", "claude")
+LLM_PROVIDERS = ("stub", "openai", "claude", "openai_compat")
 
 
 @dataclass
@@ -21,6 +21,7 @@ class Settings:
     llm_provider: str = env_choice("LLM_PROVIDER", "stub", LLM_PROVIDERS)
     llm_api_key: str = os.getenv("LLM_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
     llm_model: str = os.getenv("LLM_MODEL", "")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "")
     llm_timeout_seconds: float = env_float("LLM_TIMEOUT_SECONDS", 25.0, minimum=0.1)
     llm_max_retries: int = env_int("LLM_MAX_RETRIES", 3, minimum=0)
     llm_retry_backoff_seconds: float = env_float("LLM_RETRY_BACKOFF_SECONDS", 1.0, minimum=0.0)
