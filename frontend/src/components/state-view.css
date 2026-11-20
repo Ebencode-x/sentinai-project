@@ -1,0 +1,25 @@
+.state-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 32px 16px;
+  text-align: center;
+}
+.state-view--compact { padding: 16px 12px; }
+.state-view__title { margin: 8px 0 0; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.state-view__hint { margin: 0; max-width: 36ch; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.state-view__action {
+  margin-top: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  cursor: pointer;
+}
+.state-view__action:hover { text-decoration: underline; }
+.state-view__action:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; border-radius: 2px; }
