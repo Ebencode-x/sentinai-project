@@ -11,8 +11,12 @@ import Settings from "@/pages/Settings";
 import LoginPage from "@/pages/LoginPage";
 import Landing from "@/pages/Landing";
 import { useAuth, AuthProvider } from "@/hooks/useAuth";
-import { useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { startPolling, stopPolling } from "@/store/sentinai";
+
+const MascotPreview = import.meta.env.DEV
+  ? lazy(() => import("@/pages/MascotPreview"))
+  : null;
 
 function PollingManager() {
   const { isAuthenticated } = useAuth();
@@ -59,6 +63,16 @@ function AppRoutes() {
           <Route path="diff" element={<DiffViewer />} />
           <Route path="settings" element={<Settings />} />
         </Route>
+        {MascotPreview && (
+          <Route
+            path="/dev/mascot"
+            element={
+              <Suspense fallback={null}>
+                <MascotPreview />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,0 +1,64 @@
+.penguin {
+  display: block;
+  --p-body: #3c424c;
+  --p-belly: #eff1f6;
+  --p-ink: #14161a;
+  --p-wood: #a97142;
+  --p-amp: 3deg;
+}
+.light .penguin { --p-body: #2f343c; }
+.penguin--lite { --p-amp: 1.5deg; }
+
+.pg-shadow { fill: var(--border-strong); }
+.pg-body { fill: var(--p-body); stroke: var(--border-strong); stroke-width: 1; }
+.pg-belly, .pg-white { fill: var(--p-belly); }
+.pg-ink { fill: var(--p-ink); }
+.pg-lid { fill: var(--p-body); }
+.pg-x { fill: none; stroke: var(--p-ink); stroke-width: 2.4; stroke-linecap: round; }
+.pg-brow { fill: none; stroke: var(--p-belly); stroke-width: 2.2; stroke-linecap: round; }
+.pg-beak, .pg-foot { fill: var(--brand); }
+.pg-wood { fill: none; stroke: var(--p-wood); stroke-width: 4; stroke-linecap: round; }
+.pg-splinter { fill: none; stroke: var(--p-wood); stroke-width: 2; stroke-linecap: round; }
+.pg-cap { fill: var(--p-wood); }
+.pg-flag { fill: var(--bg-surface); stroke: var(--text-muted); stroke-width: 1.5; }
+.pg-cable { fill: none; stroke: var(--text-muted); stroke-width: 2; stroke-linecap: round; }
+.pg-plug { fill: var(--text-muted); }
+.pg-spark { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linecap: round; }
+.pg-drop { fill: var(--text-muted); }
+
+@keyframes pg-rock {
+  0%, 100% { transform: rotate(calc(var(--p-amp) * -1)); }
+  50% { transform: rotate(var(--p-amp)); }
+}
+@keyframes pg-lift {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-3px); }
+}
+@keyframes pg-wave {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(14deg); }
+}
+@keyframes pg-drip {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(14px); opacity: 0; }
+}
+@keyframes pg-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+.penguin--animated.penguin--loading .pg-rock {
+  transform-origin: 60px 104px;
+  animation: pg-rock 1.1s ease-in-out infinite;
+}
+.penguin--animated.penguin--loading .pg-foot-l { animation: pg-lift 1.1s ease-in-out infinite; }
+.penguin--animated.penguin--loading .pg-foot-r { animation: pg-lift 1.1s ease-in-out infinite 0.55s; }
+.penguin--animated.penguin--loading .pg-flip-l {
+  transform-origin: 33px 57px;
+  animation: pg-wave 1.1s ease-in-out infinite;
+}
+.penguin--animated.penguin--slow .pg-drop { animation: pg-drip 2.2s ease-in infinite; }
+.penguin--animated.penguin--offline .pg-spark { animation: pg-blink 1.2s ease-in-out infinite; }
+.penguin--animated.penguin--offline .pg-spark-b { animation-delay: 0.4s; }
+.penguin--animated.penguin--offline .pg-spark-c { animation-delay: 0.8s; }
