@@ -71,3 +71,25 @@ def _instantiate(name: str, cls: type[LLMProvider]) -> LLMProvider:
             return SmartStubProvider()
         return cls(api_key=key, base_url=os.getenv("LLM_BASE_URL", ""))  # type: ignore[call-arg]
     raise LLMProviderError(f"No instantiation rule for provider {name!r}.")
+
+
+def make_resilient(provider: LLMProvider) -> LLMProvider:
+    """Wrap a network provider with the shared breaker and an offline stub fallback.
+
+    Offline providers (stub, mock) and already wrapped providers are returned as is.
+    The breaker is keyed by host, so it is the same one the remediation stack uses.
+    """
+    from sentinai.llm.breaker import get_breaker  # noqa: PLC0415
+    from sentinai.llm.resilient import ResilientProvider  # noqa: PLC0415
+    from sentinai.llm.smart_stub import SmartStubProvider  # noqa: PLC0415
+
+    name = getattr(provider, "provider_name", "")
+    if name == "anthropic":
+        key = "api.anthropic.com"
+    elif name == "openai_compat":
+        key = getattr(provider, "endpoint", "")
+    else:
+        return provider
+    if not key:
+        return provider
+    return ResilientProvider(provider, SmartStubProvider(), get_breaker(key))

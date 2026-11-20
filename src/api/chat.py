@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from sentinai.llm.base import LLMMessage, LLMRequest, Role
 from sentinai.llm.exceptions import LLMAuthError, LLMError, LLMProviderError
-from sentinai.llm.factory import build_provider
+from sentinai.llm.factory import build_provider, make_resilient
 from src.api.deps import require_user
 from src.core.state import app_state
 from src.db.models import User
@@ -68,7 +68,7 @@ def _build_system_prompt(incidents: list, stats: dict) -> str:
 
 async def _stream_sse(question: str, system: str):
     try:
-        provider = build_provider()
+        provider = make_resilient(build_provider())
     except LLMAuthError:
         yield b'data: {"error": "Set ANTHROPIC_API_KEY to enable the assistant."}\n\n'
         return

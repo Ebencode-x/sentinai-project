@@ -77,6 +77,10 @@ class OpenAICompatProvider(LLMProvider):
         }
         self._transport = transport
 
+    @property
+    def endpoint(self) -> str:
+        return self._url
+
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=_TIMEOUT, transport=self._transport)
 
