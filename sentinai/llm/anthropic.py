@@ -16,6 +16,7 @@ from sentinai.llm.exceptions import (
     LLMAuthError,
     LLMProviderError,
     LLMRateLimitError,
+    LLMServerError,
     LLMTimeoutError,
 )
 
@@ -40,6 +41,8 @@ def _map_error(exc: Exception) -> LLMProviderError:
         return LLMRateLimitError(str(exc))
     if isinstance(exc, anthropic.APITimeoutError):
         return LLMTimeoutError(str(exc))
+    if isinstance(exc, (anthropic.InternalServerError, anthropic.APIConnectionError)):
+        return LLMServerError(str(exc))
     return LLMProviderError(str(exc))
 
 
