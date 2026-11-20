@@ -16,6 +16,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
+from sentinai.llm.breaker import get_breaker
 from src.core.config import settings
 from src.models.events import LogIncident, RemediationSuggestion
 
@@ -405,6 +406,29 @@ def _try_parse_sections(
 
 
 def _post_json_with_retry(
+    *,
+    url: str,
+    headers: dict[str, str],
+    json_body: dict,
+    timeout_seconds: float,
+) -> dict:
+    """POST JSON through the circuit breaker shared with the chat stack.
+
+    A call counts as failed only after every retry is used up. While the
+    breaker is open the call fails at once with LLMCircuitOpenError, so
+    neither the network nor the backoff sleeps are touched.
+    """
+    return get_breaker(url).call(
+        lambda: _post_json_attempts(
+            url=url,
+            headers=headers,
+            json_body=json_body,
+            timeout_seconds=timeout_seconds,
+        )
+    )
+
+
+def _post_json_attempts(
     *,
     url: str,
     headers: dict[str, str],
