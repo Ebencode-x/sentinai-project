@@ -9,6 +9,7 @@ import { useToast } from "@/components/Toast";
 import { Card } from "@/components/Card";
 import StatCard from "@/components/StatCard";
 import { useSearchParams } from "react-router";
+import { EmptyRegion, FailedRegion, PendingRegion } from "@/components/RegionStates";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -168,19 +169,25 @@ export default function IncidentTimeline() {
         </div>
 
         {isLoading ? (
+          <PendingRegion
+            skeleton={
           <div className="p-4 flex flex-col gap-2">
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className="h-10 rounded-md animate-pulse" style={{ background: "var(--bg-panel)" }} />
             ))}
           </div>
+        }
+          />
         ) : isError ? (
-          <p className="p-8 text-sm text-center" style={{ color: "var(--red)" }}>
-            Could not load incidents.
-          </p>
+          <FailedRegion />
         ) : rows.length === 0 ? (
-          <p className="p-8 text-sm text-center" style={{ color: "var(--text-muted)" }}>
-            {incidents.length === 0 ? "No incidents detected." : "No incidents match this filter."}
-          </p>
+          incidents.length === 0 ? (
+            <EmptyRegion title="No incidents detected" hint="New incidents will appear here after a scan." />
+          ) : (
+            <p className="p-8 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+              No incidents match this filter.
+            </p>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[620px]">

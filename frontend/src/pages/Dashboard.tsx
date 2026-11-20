@@ -16,6 +16,9 @@ import ActivityFeed from "@/components/ActivityFeed";
 import SystemCard from "@/components/SystemCard";
 import SourceActivity from "@/components/SourceActivity";
 import DayDetail from "@/components/DayDetail";
+import StateView from "@/components/StateView";
+import { useRegionState } from "@/hooks/useRegionState";
+import { useRetryAll } from "@/hooks/useRetryAll";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -30,6 +33,10 @@ export default function Dashboard() {
   const [range, setRange] = useState<Range>(30);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const activity = useActivity();
+  const retryAll = useRetryAll();
+  const booting = incLoading && activity.isLoading && incidents.length === 0 && !stats;
+  const failed = incError && !activity.data && incidents.length === 0 && !stats;
+  const gate = useRegionState({ pending: booting, error: failed, empty: false, retry: retryAll });
 
   async function handleScan() {
     setScanMsg(null);
@@ -43,6 +50,10 @@ export default function Dashboard() {
     } catch {
       setScanMsg("Scan failed");
     }
+  }
+
+  if (gate.kind === "state" && gate.props.mood !== "loading") {
+    return <StateView {...gate.props} />;
   }
 
   return (

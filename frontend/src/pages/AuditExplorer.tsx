@@ -8,6 +8,7 @@ import { useAudit } from "@/hooks/useAudit";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/Toast";
 import { Card } from "@/components/Card";
+import { EmptyRegion, FailedRegion, PendingRegion } from "@/components/RegionStates";
 
 type Tab = "audit" | "suggestions";
 type LevelFilter = "all" | AuditEvent["level"];
@@ -285,9 +286,13 @@ function AuditTab() {
       )}
 
       {isLoading ? (
+          <PendingRegion
+            skeleton={
         <SkeletonRows />
-      ) : isError ? (
-        <Message tone="error" text="Could not load the audit log." />
+      }
+          />
+        ) : isError ? (
+        <FailedRegion />
       ) : rows.length === 0 ? (
         <Message text={emptyText} />
       ) : (
@@ -466,11 +471,19 @@ function SuggestionsTab() {
       </div>
 
       {isLoading ? (
+          <PendingRegion
+            skeleton={
         <SkeletonRows />
-      ) : isError ? (
-        <Message tone="error" text="Could not load suggestions." />
+      }
+          />
+        ) : isError ? (
+        <FailedRegion />
       ) : rows.length === 0 ? (
-        <Message text={data.length === 0 ? "No suggestions yet." : "No suggestions match your search."} />
+        data.length === 0 ? (
+          <EmptyRegion title="No suggestions yet" hint="Suggestions will show up here." />
+        ) : (
+          <Message text="No suggestions match your search." />
+        )
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[620px]">

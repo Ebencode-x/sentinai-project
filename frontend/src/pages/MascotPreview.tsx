@@ -1,11 +1,82 @@
 import { useState } from "react";
 import StateView from "@/components/StateView";
 import type { PenguinMood } from "@/components/Penguin";
+import { useRegionState } from "@/hooks/useRegionState";
 import type { Motion } from "@/hooks/useMotion";
 import { STATE_COPY } from "@/lib/stateCopy";
+import { useConnectionStore } from "@/store/connection";
 
 const MOODS: PenguinMood[] = ["loading", "slow", "offline", "error", "empty"];
 const MOTIONS: Motion[] = ["full", "lite", "none"];
+type Mode = "pending" | "error" | "empty" | "data";
+const MODES: Mode[] = ["pending", "error", "empty", "data"];
+const LINKS = ["online", "offline", "unreachable"] as const;
+
+function Choice({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      style={{
+        background: "none",
+        border: 0,
+        padding: 0,
+        color: active ? "var(--brand)" : "var(--text-secondary)",
+        fontWeight: active ? 700 : 400,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Simulator() {
+  const [mode, setMode] = useState<Mode>("pending");
+  const [link, setLinkName] = useState<(typeof LINKS)[number]>("online");
+  const view = useRegionState({
+    pending: mode === "pending",
+    error: mode === "error",
+    empty: mode === "empty",
+    retry: () => setMode("pending"),
+  });
+
+  function setLink(l: (typeof LINKS)[number]) {
+    setLinkName(l);
+    useConnectionStore.setState(
+      l === "offline"
+        ? { browserOnline: false }
+        : { browserOnline: true, failures: l === "unreachable" ? 2 : 0 }
+    );
+  }
+
+  return (
+    <div style={{ padding: 16, fontSize: 13 }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+        <span>Region:</span>
+        {MODES.map((m) => (
+          <Choice key={m} active={mode === m} label={m} onClick={() => setMode(m)} />
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 16 }}>
+        <span>Link:</span>
+        {LINKS.map((l) => (
+          <Choice key={l} active={link === l} label={l} onClick={() => setLink(l)} />
+        ))}
+      </div>
+      <div style={{ minHeight: 260, marginTop: 8 }}>
+        {view.kind === "state" ? (
+          <StateView {...view.props} />
+        ) : (
+          <p style={{ color: "var(--text-muted)", padding: 32 }}>
+            {view.kind === "quiet" ? "Quiet phase, nothing shown yet." : "Data would render here."}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Row({ light, motion }: { light: boolean; motion: Motion }) {
   return (
@@ -47,26 +118,12 @@ export default function MascotPreview() {
       <div style={{ display: "flex", gap: 16, padding: 16, fontSize: 13 }}>
         <span>Motion:</span>
         {MOTIONS.map((m) => (
-          <button
-            key={m}
-            type="button"
-            aria-pressed={motion === m}
-            onClick={() => setMotion(m)}
-            style={{
-              background: "none",
-              border: 0,
-              padding: 0,
-              color: motion === m ? "var(--brand)" : "var(--text-secondary)",
-              fontWeight: motion === m ? 700 : 400,
-              cursor: "pointer",
-            }}
-          >
-            {m}
-          </button>
+          <Choice key={m} active={motion === m} label={m} onClick={() => setMotion(m)} />
         ))}
       </div>
       <Row light={false} motion={motion} />
       <Row light motion={motion} />
+      <Simulator />
     </div>
   );
 }
