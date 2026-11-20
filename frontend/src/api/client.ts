@@ -1,5 +1,6 @@
 import axios, { AxiosError } from "axios";
 import { getStoredToken } from "@/hooks/useAuth";
+import { useConnectionStore } from "@/store/connection";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -14,7 +15,10 @@ http.interceptors.request.use((cfg) => {
 
 // ── Response: handle auth + server errors globally ────────────────────────
 http.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    useConnectionStore.getState().reportOk();
+    return res;
+  },
   (err: AxiosError) => {
     if (err.response?.status === 401 && !(err.config as unknown as { skipAuthRedirect?: boolean } | undefined)?.skipAuthRedirect) {
       // Expired or invalid session — clear it and reload to login screen
@@ -22,6 +26,14 @@ http.interceptors.response.use(
       localStorage.removeItem("sentinai_session_user");
       localStorage.removeItem("sentinai_session_expiry");
       window.location.reload();
+    }
+    if (!axios.isCancel(err)) {
+      const status = err.response?.status;
+      if (!err.response || status === 502 || status === 503 || status === 504) {
+        useConnectionStore.getState().reportFail();
+      } else {
+        useConnectionStore.getState().reportOk();
+      }
     }
     return Promise.reject(err);
   }
