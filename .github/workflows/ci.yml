@@ -205,3 +205,33 @@ jobs:
             409) echo "::warning::Render returned 409, a deploy is probably already running" ;;
             *) echo "::error::Render deploy hook failed with HTTP $status"; exit 1 ;;
           esac
+
+  types:
+    name: "[ TYPES ] mypy report (informational)"
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and mypy
+        run: |
+          pip install -r requirements-dev.txt
+          pip install mypy==2.3.1
+
+      - name: Run mypy (report only, never fails the build)
+        run: |
+          mypy | tee mypy-report.txt || true
+          { echo "### mypy report"; tail -n 1 mypy-report.txt; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mypy report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mypy-report
+          path: mypy-report.txt

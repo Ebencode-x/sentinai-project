@@ -38,3 +38,9 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.coverage.run]
 source = ["src"]
 omit = ["src/integrations/llm_client.py"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "sentinai"]
+ignore_missing_imports = true
+check_untyped_defs = true
