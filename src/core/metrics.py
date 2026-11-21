@@ -19,6 +19,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
+from prometheus_client.core import GaugeMetricFamily
 
 _LATENCY_WINDOW = 200
 _LATENCY_BUCKETS = (50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000)
@@ -132,3 +133,38 @@ class MetricsCollector:
 
 shared_registry = CollectorRegistry()
 metrics = MetricsCollector(registry=shared_registry)
+
+
+class BreakerCollector:
+    """Exports LLM circuit breaker state, read fresh on every scrape."""
+
+    def collect(self):
+        # Imported here so src.core.metrics never depends on sentinai.llm at import time
+        from sentinai.llm.breaker import breaker_snapshots
+
+        is_open = GaugeMetricFamily(
+            "sentinai_llm_breaker_open",
+            "1 while the circuit breaker for a provider host is open, otherwise 0",
+            labels=["provider"],
+        )
+        failures = GaugeMetricFamily(
+            "sentinai_llm_breaker_failures",
+            "Consecutive transient failures counted by the breaker",
+            labels=["provider"],
+        )
+        retry = GaugeMetricFamily(
+            "sentinai_llm_breaker_retry_seconds",
+            "Seconds left before an open breaker allows another call",
+            labels=["provider"],
+        )
+        for snap in breaker_snapshots():
+            name = str(snap["name"])
+            is_open.add_metric([name], 1.0 if snap["state"] == "open" else 0.0)
+            failures.add_metric([name], float(snap["failures"]))
+            retry.add_metric([name], float(snap["retry_in_seconds"]))
+        yield is_open
+        yield failures
+        yield retry
+
+
+shared_registry.register(BreakerCollector())
