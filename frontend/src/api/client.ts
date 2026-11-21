@@ -102,6 +102,14 @@ export interface StatsSnapshot {
   events_pending?: number;
   events_failed?: number;
   persistence_errors?: number;
+  llm_breakers?: {
+    name: string;
+    state: string;
+    failures: number;
+    threshold: number;
+    cooldown_seconds: number;
+    retry_in_seconds: number;
+  }[];
   database_reachable?: boolean;
   recent_suggestions_by_source?: {
     stub: number;
