@@ -14,6 +14,7 @@ from sentinai.llm.exceptions import (
     LLMError,
     LLMProviderError,
     LLMRateLimitError,
+    LLMServerError,
     LLMTimeoutError,
 )
 
@@ -39,6 +40,8 @@ def _status_error(status: int, text: str) -> LLMError:
         return LLMAuthError(message)
     if status == 429:
         return LLMRateLimitError(message)
+    if status >= 500:
+        return LLMServerError(message)
     return LLMProviderError(message)
 
 
@@ -74,6 +77,10 @@ class OpenAICompatProvider(LLMProvider):
         }
         self._transport = transport
 
+    @property
+    def endpoint(self) -> str:
+        return self._url
+
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=_TIMEOUT, transport=self._transport)
 
@@ -87,7 +94,7 @@ class OpenAICompatProvider(LLMProvider):
         except httpx.TimeoutException as exc:
             raise LLMTimeoutError("Request timed out.") from exc
         except httpx.HTTPError as exc:
-            raise LLMProviderError(f"Network error: {type(exc).__name__}") from exc
+            raise LLMServerError(f"Network error: {type(exc).__name__}") from exc
         if resp.status_code >= 400:
             raise _status_error(resp.status_code, resp.text)
         try:
@@ -129,4 +136,4 @@ class OpenAICompatProvider(LLMProvider):
         except httpx.TimeoutException as exc:
             raise LLMTimeoutError("Request timed out.") from exc
         except httpx.HTTPError as exc:
-            raise LLMProviderError(f"Network error: {type(exc).__name__}") from exc
+            raise LLMServerError(f"Network error: {type(exc).__name__}") from exc
