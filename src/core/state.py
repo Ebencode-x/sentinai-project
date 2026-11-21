@@ -7,6 +7,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from sentinai.llm.breaker import breaker_snapshots
 from src.core.audit import AuditLogger, SessionFactory, audit_logger
 from src.core.config import AUTONOMY_MODES, settings
 from src.core.crypto import KEY_ENV, MASK_MARK, SecretKeyError, decrypt, encrypt, mask_url
@@ -223,6 +224,7 @@ class AppState:
             "events_pending": events_pending,
             "events_failed": events_failed,
             "database_reachable": reachable,
+            "llm_breakers": breaker_snapshots(),
             "llm_metrics": metrics.snapshot(),
         }
 
