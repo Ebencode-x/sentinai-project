@@ -24,6 +24,20 @@ function lastScan(ts: string | null | undefined): { value: string; title?: strin
   }
 }
 
+function providerRow(stats: StatsSnapshot): Row {
+  const provider = stats.llm_provider ?? "n/a";
+  const tripped = (stats.llm_breakers ?? []).find((b) => b.state !== "closed");
+  if (!tripped) return { label: "Provider", value: provider };
+  if (tripped.state === "open") {
+    return {
+      label: "Provider",
+      value: `${provider}, circuit open, retry in ${Math.ceil(tripped.retry_in_seconds)}s`,
+      tone: "bad",
+    };
+  }
+  return { label: "Provider", value: `${provider}, circuit ${tripped.state}` };
+}
+
 function buildRows(stats: StatsSnapshot): Row[] {
   const pending = stats.events_pending;
   const failed = stats.events_failed;
@@ -55,7 +69,7 @@ function buildRows(stats: StatsSnapshot): Row[] {
       tone: (failed ?? 0) > 0 ? "bad" : undefined,
     },
     { label: "Last scan", value: scan.value, title: scan.title },
-    { label: "Provider", value: stats.llm_provider ?? "n/a" },
+    providerRow(stats),
   ];
 
   if (errors > 0) {
