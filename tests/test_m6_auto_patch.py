@@ -51,6 +51,10 @@ def _make_suggestion(
     )
 
 
+_FILE_BEFORE = "fix = False\n"
+_GOOD_DIFF = "--- a/src/app.py\n+++ b/src/app.py\n@@ -1 +1 @@\n-fix = False\n+fix = True\n"
+
+
 def _mock_github_client(
     pr_url: str = "https://github.com/org/repo/pull/42",
 ) -> MagicMock:
@@ -61,6 +65,12 @@ def _mock_github_client(
     mock_branch.commit.sha = "deadbeef"
     mock_repo.get_branch.return_value = mock_branch
     mock_repo.create_git_ref.return_value = MagicMock()
+    import base64
+
+    mock_file = MagicMock()
+    mock_file.content = base64.b64encode(_FILE_BEFORE.encode()).decode()
+    mock_file.sha = "filesha1"
+    mock_repo.get_contents.return_value = mock_file
 
     mock_pr = MagicMock()
     mock_pr.number = 42
@@ -90,7 +100,7 @@ def test_open_patch_pr_returns_pr_url() -> None:
         incident_id="abcdef12-xxxx",
         trigger_line="ERROR boom",
         summary="Something broke.",
-        proposed_patch="fix = True",
+        proposed_patch=_GOOD_DIFF,
         test_guidance="Assert fix is True.",
         confidence=0.9,
     )
@@ -105,7 +115,7 @@ def test_open_patch_pr_creates_branch_with_correct_prefix() -> None:
         incident_id="abcdef12-xxxx",
         trigger_line="ERROR boom",
         summary="Summary.",
-        proposed_patch="fix = True",
+        proposed_patch=_GOOD_DIFF,
         test_guidance="",
         confidence=0.75,
     )
@@ -122,7 +132,7 @@ def test_open_patch_pr_branch_already_exists_still_opens_pr() -> None:
         incident_id="abcdef12-xxxx",
         trigger_line="ERROR boom",
         summary="Summary.",
-        proposed_patch="fix = True",
+        proposed_patch=_GOOD_DIFF,
         test_guidance="",
         confidence=0.75,
     )
