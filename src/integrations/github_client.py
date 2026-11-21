@@ -10,6 +10,11 @@ import unidiff
 from github import Github, GithubException
 
 from src.core.config import settings
+from src.integrations.patch_utils import (
+    PatchRejected,
+    apply_verified,
+    parse_single_file_patch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,21 @@ class GitHubClient:
         branch_name = f"sentinai/fix-{incident_id[:8]}"
         timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
+        branch_created = False
+        try:
+            default_branch = self._repo.default_branch
+            self._prepare_patch(proposed_patch, ref=default_branch)
+        except PatchRejected as exc:
+            logger.warning(
+                "Patch rejected, no branch or PR created for incident %s: %s",
+                incident_id,
+                exc,
+            )
+            return None
+        except GithubException as exc:
+            logger.error("Could not read the repository: %s", exc)
+            return None
+
         try:
             default_branch = self._repo.default_branch
             source = self._repo.get_branch(default_branch)
@@ -57,6 +77,7 @@ class GitHubClient:
                 sha=source.commit.sha,
             )
             logger.info("Created branch: %s", branch_name)
+            branch_created = True
         except GithubException as exc:
             if exc.status == 422:
                 logger.warning("Branch already exists: %s", branch_name)
@@ -70,7 +91,10 @@ class GitHubClient:
             incident_id=incident_id,
         )
         if commit_meta is None:
-            logger.warning("Patch commit skipped — PR will be description-only")
+            if branch_created:
+                self._discard_branch(branch_name)
+            logger.warning("No commit made for incident %s, no PR opened", incident_id)
+            return None
 
         pr_body = self._build_pr_body(
             incident_id=incident_id,
@@ -102,89 +126,68 @@ class GitHubClient:
             logger.error("Failed to open PR: %s", exc)
             return None
 
+    def _prepare_patch(self, proposed_patch: str, ref: str) -> dict:
+        """Check a diff against the live file at ref without writing anything.
+
+        Returns patch_file, the patched content and the file blob sha.
+        Raises PatchRejected when the diff cannot be applied safely.
+        """
+        patch_file, patch_set = parse_single_file_patch(proposed_patch)
+        try:
+            gh_file = self._repo.get_contents(patch_file, ref=ref)
+            original = base64.b64decode(gh_file.content).decode("utf-8")
+            file_sha = gh_file.sha
+        except (GithubException, AttributeError, ValueError) as exc:
+            raise PatchRejected(f"could not read {patch_file} at {ref}: {exc}") from exc
+        patched = self._apply_patch(original, patch_set)
+        if patched == original:
+            raise PatchRejected("patch produces no change")
+        return {"patch_file": patch_file, "patched": patched, "file_sha": file_sha}
+
     def _commit_patch(
         self,
         branch_name: str,
         proposed_patch: str,
         incident_id: str,
     ) -> dict | None:
-        """Parse unified diff, apply to live file, commit to branch.
+        """Apply the diff to the live file on the branch and commit it.
 
-        Derives the target file path from the diff's own header instead of
-        requiring a separate patch_file argument. Returns commit metadata
-        (patch_file, before_sha) on success, None on skip/failure.
+        The target file comes from the diff header. Returns commit metadata
+        (patch_file, before_sha) on success, None when the patch is rejected
+        or the commit fails.
         """
-        if not proposed_patch:
-            logger.debug("No proposed_patch — skipping file commit")
-            return None
         try:
-            patch_set = unidiff.PatchSet(proposed_patch)
-        except Exception as exc:
-            logger.warning("Failed to parse unified diff: %s", exc)
+            prepared = self._prepare_patch(proposed_patch, ref=branch_name)
+        except PatchRejected as exc:
+            logger.warning("Patch rejected: %s", exc)
             return None
 
-        if len(patch_set) == 0:
-            logger.warning("Diff parsed but contains no file entries")
-            return None
-        if len(patch_set) > 1:
-            logger.warning(
-                "Diff touches %d files — only single-file patches are auto-committed",
-                len(patch_set),
-            )
-            return None
-
-        patched_file = patch_set[0]
-        patch_file = patched_file.path
-        if patch_file.startswith(("a/", "b/")):
-            patch_file = patch_file[2:]
-
-        try:
-            gh_file = self._repo.get_contents(patch_file, ref=branch_name)
-            original = base64.b64decode(gh_file.content).decode("utf-8")
-            file_sha = gh_file.sha
-        except GithubException as exc:
-            logger.warning("Could not fetch %s from GitHub: %s", patch_file, exc)
-            return None
-
-        try:
-            patched = self._apply_patch(original, patch_set)
-        except Exception as exc:
-            logger.warning("Patch application failed: %s", exc)
-            return None
-
-        if patched == original:
-            logger.info("Patch produced no changes — skipping commit")
-            return None
-
+        patch_file = prepared["patch_file"]
         try:
             self._repo.update_file(
                 path=patch_file,
                 message=f"[SentinAI] auto-patch for incident {incident_id[:8]}",
-                content=patched,
-                sha=file_sha,
+                content=prepared["patched"],
+                sha=prepared["file_sha"],
                 branch=branch_name,
             )
             logger.info("Committed patch to %s on %s", patch_file, branch_name)
-            return {"patch_file": patch_file, "before_sha": file_sha}
+            return {"patch_file": patch_file, "before_sha": prepared["file_sha"]}
         except GithubException as exc:
             logger.warning("Failed to commit patch: %s", exc)
             return None
 
+    def _discard_branch(self, branch_name: str) -> None:
+        """Delete a branch SentinAI created when nothing was committed to it."""
+        try:
+            self._repo.get_git_ref(f"heads/{branch_name}").delete()
+            logger.info("Deleted empty branch: %s", branch_name)
+        except GithubException as exc:
+            logger.warning("Could not delete branch %s: %s", branch_name, exc)
+
     def _apply_patch(self, original: str, patch_set: unidiff.PatchSet) -> str:
-        """Apply a parsed unidiff PatchSet to original file content."""
-        lines = original.splitlines(keepends=True)
-        # Work through hunks in reverse so line offsets stay valid
-        for patched_file in patch_set:
-            for hunk in reversed(list(patched_file)):
-                start = hunk.source_start - 1  # unidiff is 1-indexed
-                length = hunk.source_length
-                new_lines = [
-                    line.value
-                    for line in hunk
-                    if line.line_type in (unidiff.LINE_TYPE_ADDED, unidiff.LINE_TYPE_CONTEXT)
-                ]
-                lines[start : start + length] = new_lines
-        return "".join(lines)
+        """Apply a parsed unidiff PatchSet after checking its context lines."""
+        return apply_verified(original, patch_set)
 
     def _build_pr_body(
         self,
