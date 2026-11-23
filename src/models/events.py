@@ -71,7 +71,7 @@ class RemediationSuggestion(BaseModel):
     )
     patch_file: str | None = Field(
         default=None,
-        description="File path targeted by the committed patch, derived from the diff.",
+        description="Repo-relative path of the file patched in the auto-patch PR.",
     )
     before_sha: str | None = Field(
         default=None,
@@ -81,10 +81,6 @@ class RemediationSuggestion(BaseModel):
     branch_name: str | None = Field(
         default=None,
         description="Branch SentinAI committed the patch to. Used internally for rollback.",
-    )
-    patch_file: str | None = Field(
-        default=None,
-        description="Repo-relative path of the file patched in the auto-patch PR.",
     )
     autonomy_mode: str | None = Field(
         default=None,
