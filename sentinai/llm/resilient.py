@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 
 from sentinai.llm.base import LLMProvider, LLMRequest, LLMResponse
 from sentinai.llm.breaker import CircuitBreaker
-from sentinai.llm.exceptions import TRANSIENT_ERRORS, LLMCircuitOpenError
+from sentinai.llm.exceptions import TRANSIENT_ERRORS, LLMCircuitOpenError, LLMError
 from sentinai.llm.smart_stub import _DEMO_NOTICE
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ FALLBACK_NOTICE = (
     "\n\n[Provider unavailable: this is an offline answer. "
     "Live AI answers resume automatically when the provider recovers.]"
 )
-_FALLBACK_ON = (*TRANSIENT_ERRORS, LLMCircuitOpenError)
+_FALLBACK_ON: tuple[type[LLMError], ...] = (*TRANSIENT_ERRORS, LLMCircuitOpenError)
 _TOKEN = re.compile(r"\S+\s*|\s+")
 
 
