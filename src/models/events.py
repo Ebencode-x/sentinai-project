@@ -8,13 +8,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+Severity = Literal["warning", "critical"]
+IncidentStatus = Literal["open", "resolved"]
+SuggestionSource = Literal["stub", "provider", "fallback"]
+
 
 class LogIncident(BaseModel):
     """Structured representation of an error incident from application logs."""
 
     incident_id: str = Field(..., description="Stable fingerprint for deduplication.")
     detected_at_utc: datetime
-    severity: Literal["warning", "critical"] = "critical"
+    severity: Severity = "critical"
     trigger_line: str
     stacktrace: str
     context_before_error: str = ""
@@ -25,7 +29,7 @@ class LogIncident(BaseModel):
     occurrence_count: int = Field(
         default=1, ge=1, description="How many times this incident was seen."
     )
-    status: Literal["open", "resolved"] = "open"
+    status: IncidentStatus = "open"
     resolved_at: datetime | None = None
     resolved_by: str | None = None
 
@@ -45,7 +49,7 @@ class RemediationSuggestion(BaseModel):
     proposed_config_change: str
     confidence: float = Field(..., ge=0.0, le=1.0)
     risks: str
-    source: Literal["stub", "provider", "fallback"] = "stub"
+    source: SuggestionSource = "stub"
     provider_error: str | None = None
     model: str | None = Field(
         default=None,

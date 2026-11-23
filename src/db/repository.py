@@ -23,7 +23,13 @@ from src.db.models import (
     RollbackEntry,
     Suggestion,
 )
-from src.models.events import LogIncident, RemediationSuggestion
+from src.models.events import (
+    IncidentStatus,
+    LogIncident,
+    RemediationSuggestion,
+    Severity,
+    SuggestionSource,
+)
 
 
 def default_account_id(db: Session) -> str | None:
@@ -122,14 +128,14 @@ def _to_incident(row: Incident) -> LogIncident:
     return LogIncident(
         incident_id=row.fingerprint,
         detected_at_utc=row.detected_at,
-        severity=row.severity,
+        severity=cast(Severity, row.severity),
         trigger_line=row.trigger_line,
         stacktrace=row.stacktrace,
         context_before_error=row.context_before_error,
         source=row.source,
         last_seen_at=row.last_seen_at,
         occurrence_count=row.occurrence_count,
-        status=row.status,
+        status=cast(IncidentStatus, row.status),
         resolved_at=row.resolved_at,
         resolved_by=row.resolved_by,
     )
@@ -206,7 +212,7 @@ def _to_suggestion(row: Suggestion) -> RemediationSuggestion:
         proposed_config_change=row.proposed_config_change,
         confidence=row.confidence,
         risks=row.risks,
-        source=row.source,
+        source=cast(SuggestionSource, row.source),
         provider_error=row.provider_error,
         model=row.model,
         proposed_patch=row.proposed_patch,
