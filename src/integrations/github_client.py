@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import unidiff
 from github import Github, GithubException
+from github.Repository import Repository
 
 from src.core.config import settings
 from src.integrations.patch_utils import (
@@ -27,7 +28,7 @@ class GitHubClient:
             raise ValueError("GitHub integration is not configured")
         self._client = Github(settings.github_token)
         self._repo_name = settings.github_repo
-        self._repo_cache = None
+        self._repo_cache: Repository | None = None
 
     @property
     def _repo(self):

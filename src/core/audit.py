@@ -42,8 +42,10 @@ from collections import deque
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy import Delete, Update, delete, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from src.db.models import AuditEvent
@@ -229,7 +231,7 @@ class AuditLogger:
         if self._session_factory is None:
             return 0
         with self._session_factory() as db:
-            result = db.execute(stmt)
+            result = cast(CursorResult, db.execute(stmt))
             db.commit()
             return result.rowcount or 0
 

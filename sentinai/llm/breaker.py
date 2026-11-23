@@ -13,7 +13,7 @@ import threading
 import time
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
-from typing import TypeVar
+from typing import TypedDict, TypeVar
 from urllib.parse import urlparse
 
 import httpx
@@ -44,6 +44,15 @@ def is_transient(exc: BaseException) -> bool:
     if isinstance(exc, httpx.UnsupportedProtocol):
         return False
     return isinstance(exc, httpx.TransportError)
+
+
+class BreakerSnapshot(TypedDict):
+    name: str
+    state: str
+    failures: int
+    threshold: int
+    cooldown_seconds: float
+    retry_in_seconds: float
 
 
 class CircuitBreaker:
@@ -157,7 +166,7 @@ class CircuitBreaker:
         self.record_success()
         return result
 
-    def snapshot(self) -> dict[str, object]:
+    def snapshot(self) -> BreakerSnapshot:
         with self._lock:
             retry_in = 0.0
             if self._state is BreakerState.OPEN:
@@ -210,7 +219,7 @@ def get_breaker(url_or_host: str) -> CircuitBreaker:
         return breaker
 
 
-def breaker_snapshots() -> list[dict[str, object]]:
+def breaker_snapshots() -> list[BreakerSnapshot]:
     with _REGISTRY_LOCK:
         breakers = list(_REGISTRY.values())
     return [b.snapshot() for b in breakers]
