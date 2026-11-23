@@ -71,8 +71,13 @@ class LLMProvider(ABC):
         """Return a full completion for the given request."""
 
     @abstractmethod
-    async def stream(self, request: LLMRequest) -> AsyncIterator[str]:
-        """Yield response tokens as they arrive."""
+    def stream(self, request: LLMRequest) -> AsyncIterator[str]:
+        """Yield response tokens as they arrive.
+
+        Declared without async on purpose: implementations are async generators
+        (async def with yield), so calling them returns the iterator directly and
+        callers write `async for token in provider.stream(request)`.
+        """
 
     def supports_streaming(self) -> bool:
         return True

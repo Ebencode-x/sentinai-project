@@ -14,6 +14,7 @@ except ImportError as e:
 from sentinai.llm.base import LLMProvider, LLMRequest, LLMResponse, Role
 from sentinai.llm.exceptions import (
     LLMAuthError,
+    LLMError,
     LLMProviderError,
     LLMRateLimitError,
     LLMServerError,
@@ -34,7 +35,7 @@ def _build_messages(request: LLMRequest) -> tuple[str | None, list[dict]]:
     return system, messages
 
 
-def _map_error(exc: Exception) -> LLMProviderError:
+def _map_error(exc: Exception) -> LLMError:
     if isinstance(exc, anthropic.AuthenticationError):
         return LLMAuthError(str(exc))
     if isinstance(exc, anthropic.RateLimitError):
