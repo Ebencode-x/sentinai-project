@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import case, delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -150,7 +152,7 @@ def set_incident_status(
         .execution_options(synchronize_session=False)
     )
     db.commit()
-    return result.rowcount > 0
+    return cast(CursorResult, result).rowcount > 0
 
 
 def list_incidents(db: Session, account_id: str, limit: int) -> list[LogIncident]:
@@ -321,7 +323,7 @@ def delete_channel(db: Session, account_id: str, channel_id: str) -> bool:
         )
     )
     db.commit()
-    return result.rowcount > 0
+    return cast(CursorResult, result).rowcount > 0
 
 
 LEDGER_LIST_LIMIT = 500
