@@ -191,3 +191,21 @@ def test_a_scan_that_opens_a_pr_records_it_in_the_ledger(app_db):
     entries = state.list_rollbacks()
     assert [e["pr_number"] for e in entries] == [7]
     assert entries[0]["incident_id"] == "fp-scan"
+
+
+def test_confirm_refuses_when_the_current_sha_was_not_recorded(app_db):
+    from src.db import repository
+
+    factory, _ = app_db
+    github = _github()
+    state = _state(factory, github)
+    entry = _entry(state)
+    state.propose_rollback(entry["id"])
+    with factory() as db:
+        account_id = state._require_account_id(db)
+        row = repository.get_ledger_entry(db, account_id, entry["id"])
+        row.rollback_current_sha = None
+        db.commit()
+    with pytest.raises(ValueError, match="no recorded file sha"):
+        state.confirm_rollback(entry["id"])
+    github.revert_patch.assert_not_called()
