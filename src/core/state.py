@@ -403,6 +403,9 @@ class AppState:
             if github is None:
                 raise ValueError("GitHub integration not configured.")
 
+            if row.rollback_current_sha is None:
+                raise ValueError("The proposal has no recorded file sha. Call propose again.")
+
             new_sha = github.revert_patch(
                 patch_file=row.patch_file,
                 before_sha=row.before_sha,

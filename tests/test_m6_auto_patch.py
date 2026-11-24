@@ -307,7 +307,11 @@ def test_remediation_engine_slack_failure_does_not_raise() -> None:
         mock_settings.github_repo = "org/repo"
 
         mock_github = MagicMock()
-        mock_github.open_patch_pr.return_value = "https://github.com/org/repo/pull/7"
+        mock_github.open_patch_pr.return_value = {
+            "pr_url": "https://github.com/org/repo/pull/7",
+            "pr_number": 7,
+            "branch_name": "sentinai/fix-abcdef12",
+        }
         mock_gh_cls.return_value = mock_github
         mock_notifier.notify.side_effect = Exception("Slack is down")
 
@@ -315,6 +319,7 @@ def test_remediation_engine_slack_failure_does_not_raise() -> None:
         result = engine.suggest_fix(incident, autonomy_mode="auto_pr")  # must not raise
 
     assert result is not None
+    mock_notifier.notify.assert_called_once()
 
 
 def test_remediation_engine_propose_only_withholds_pr() -> None:

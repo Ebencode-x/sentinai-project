@@ -24,7 +24,8 @@ def build_provider(provider: str | None = None) -> LLMProvider:
 
     API keys are read from env vars — never from arguments.
     """
-    name = (provider or os.getenv("SENTINAI_LLM_PROVIDER", "anthropic")).lower()
+    env_name = os.getenv("SENTINAI_LLM_PROVIDER", "anthropic")
+    name = (provider or env_name).lower()
 
     # Lazy-register built-ins on first call
     if not _REGISTRY:

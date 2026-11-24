@@ -31,7 +31,7 @@ from sqlalchemy import or_, select, update
 from src.db import repository
 from src.db.ingest import MAX_ATTEMPTS
 from src.db.models import IngestedEvent, Source
-from src.models.events import LogIncident
+from src.models.events import LogIncident, Severity
 
 if TYPE_CHECKING:
     from src.core.state import AppState
@@ -41,7 +41,11 @@ logger = logging.getLogger("sentinai.events")
 LEASE = timedelta(minutes=10)
 BATCH_SIZE = 5
 _OFF_VALUES = {"0", "false", "no", "off"}
-_SEVERITY = {"warning": "warning", "error": "critical", "critical": "critical"}
+_SEVERITY: dict[str, Severity] = {
+    "warning": "warning",
+    "error": "critical",
+    "critical": "critical",
+}
 
 
 def worker_enabled() -> bool:
