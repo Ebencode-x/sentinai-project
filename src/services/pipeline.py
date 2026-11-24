@@ -281,7 +281,7 @@ class RemediationPipeline:
 
         logger.info("[Pipeline] Stage 4: opening PR")
         try:
-            pr_url = self._github.open_patch_pr(
+            pr = self._github.open_patch_pr(
                 incident_id=incident.incident_id,
                 trigger_line=incident.trigger_line,
                 summary=suggestion.summary,
@@ -290,9 +290,14 @@ class RemediationPipeline:
                 confidence=suggestion.confidence,
                 patch_file=suggestion.patch_file,
             )
-            result.pr_url = pr_url
-            result.suggestion = suggestion.model_copy(update={"pr_url": pr_url})
-            logger.info("[Pipeline] PR opened: %s", pr_url)
+            if pr is None:
+                result.failure_reason = "PR stage failed: no pull request was opened"
+                logger.warning("[Pipeline] No PR opened for %s", incident.incident_id)
+            else:
+                pr_url = pr["pr_url"]
+                result.pr_url = pr_url
+                result.suggestion = suggestion.model_copy(update={"pr_url": pr_url})
+                logger.info("[Pipeline] PR opened: %s", pr_url)
         except Exception as exc:
             logger.warning("[Pipeline] PR creation failed: %s", exc)
             result.failure_reason = f"PR stage failed: {exc}"
