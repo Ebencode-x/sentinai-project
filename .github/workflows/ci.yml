@@ -207,7 +207,7 @@ jobs:
           esac
 
   types:
-    name: "[ TYPES ] mypy report (informational)"
+    name: "[ TYPES ] mypy"
     runs-on: ubuntu-24.04
 
     steps:
@@ -224,9 +224,13 @@ jobs:
           pip install -r requirements-dev.txt
           pip install mypy==2.3.1
 
-      - name: Run mypy (report only, never fails the build)
+      - name: Run mypy
+        shell: bash
+        run: mypy | tee mypy-report.txt
+
+      - name: Add mypy result to the job summary
+        if: always()
         run: |
-          mypy | tee mypy-report.txt || true
           { echo "### mypy report"; tail -n 1 mypy-report.txt; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload mypy report
