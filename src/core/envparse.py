@@ -83,3 +83,7 @@ def env_choice(name: str, default: str, choices: Collection[str]) -> str:
         allowed = ", ".join(sorted(choices))
         raise ConfigError(f"{name}={raw!r} is not one of: {allowed}")
     return value
+
+
+def _gate_probe() -> int:
+    return "not an int"
