@@ -21,6 +21,11 @@ from typing import Any
 
 import yaml
 
+from src.integrations.patch_utils import (
+    PatchRejected,
+    normalize_repo_path,
+    parse_single_file_patch,
+)
 from src.services.patch_semantic_validator import (
     PatchSemanticValidator,
 )
@@ -65,6 +70,7 @@ class PatchPolicyEngine:
     """
 
     policy_path: Path = field(default_factory=lambda: _DEFAULT_POLICY)
+    require_policy: bool = False
     _policy: dict[str, Any] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -76,6 +82,8 @@ class PatchPolicyEngine:
             self._policy = yaml.safe_load(text) or {}
             logger.info("Policy loaded from %s", self.policy_path)
         except FileNotFoundError:
+            if self.require_policy:
+                raise
             logger.warning(
                 "Policy file not found: %s — using permissive defaults",
                 self.policy_path,
@@ -98,6 +106,20 @@ class PatchPolicyEngine:
     ) -> PolicyResult:
         """Validate a proposed patch. Returns PolicyResult with decision."""
         reasons: list[str] = []
+
+        # 0 - one clean path, and it must be the file the diff really edits
+        try:
+            patch_file = normalize_repo_path(patch_file)
+        except PatchRejected as exc:
+            reasons.append(str(exc))
+            return PolicyResult(decision=Decision.BLOCK, reasons=tuple(reasons), risk_tier="high")
+        try:
+            header_file: str | None = parse_single_file_patch(patch)[0]
+        except PatchRejected:
+            header_file = None
+        if header_file is not None and header_file != patch_file:
+            reasons.append(f"patch_file {patch_file} does not match diff header {header_file}")
+            return PolicyResult(decision=Decision.BLOCK, reasons=tuple(reasons), risk_tier="high")
 
         # 1 — blocked paths
         if self._is_blocked_path(patch_file):

@@ -64,7 +64,8 @@ class RemediationPipeline:
     _audit: AuditLogger = field(init=False)
 
     def __post_init__(self) -> None:
-        self._engine = RemediationEngine(llm_client=build_llm_client())
+        # The pipeline runs its own policy gate (Stage 2b), so the engine skips its gate
+        self._engine = RemediationEngine(llm_client=build_llm_client(), enforce_policy=False)
         # C2 — prefer sandboxed runner; falls back internally when Docker unavailable
         try:
             self._runner = SandboxedPatchRunner(project_root=self.project_root)
@@ -81,10 +82,10 @@ class RemediationPipeline:
             self._runner = plain  # type: ignore[assignment]
             self._fallback_runner = plain
             self._sandbox_available = False
-        policy_kwargs = {}
         if self.policy_path is not None:
-            policy_kwargs["policy_path"] = self.policy_path
-        self._policy = PatchPolicyEngine(**policy_kwargs)
+            self._policy = PatchPolicyEngine(policy_path=self.policy_path)
+        else:
+            self._policy = PatchPolicyEngine()
         self._audit = audit_logger
         try:
             self._github = GitHubClient()
