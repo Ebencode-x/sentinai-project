@@ -11,6 +11,24 @@ class PatchRejected(ValueError):
     """The proposed diff cannot be applied safely."""
 
 
+def _strip_diff_prefix(name: str) -> str:
+    return name[2:] if name.startswith(("a/", "b/")) else name
+
+
+def normalize_repo_path(raw: str) -> str:
+    """Return raw as a clean repo-relative POSIX path, or raise PatchRejected.
+
+    Empty, absolute, backslash and NUL paths and any empty, "." or ".." segment
+    are rejected, so the policy and the GitHub API always see the same plain path.
+    """
+    path = raw.strip()
+    if not path or "\x00" in path or "\\" in path or path.startswith("/"):
+        raise PatchRejected(f"unsafe patch path: {raw!r}")
+    if any(part in ("", ".", "..") for part in path.split("/")):
+        raise PatchRejected(f"unsafe patch path: {raw!r}")
+    return path
+
+
 def parse_single_file_patch(diff_text: str) -> tuple[str, unidiff.PatchSet]:
     """Return (repo-relative path, PatchSet) for a diff that edits exactly one file."""
     if not diff_text or not diff_text.strip():
@@ -26,10 +44,11 @@ def parse_single_file_patch(diff_text: str) -> tuple[str, unidiff.PatchSet]:
     patched_file = patch_set[0]
     if patched_file.is_added_file or patched_file.is_removed_file:
         raise PatchRejected("creating or deleting files is not allowed")
-    path = patched_file.path
-    if path.startswith(("a/", "b/")):
-        path = path[2:]
-    return path, patch_set
+    source = _strip_diff_prefix(patched_file.source_file)
+    target = _strip_diff_prefix(patched_file.target_file)
+    if source != target:
+        raise PatchRejected(f"diff headers name different files: {source} and {target}")
+    return normalize_repo_path(source), patch_set
 
 
 def _same_line(left: str, right: str) -> bool:

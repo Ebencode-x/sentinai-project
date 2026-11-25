@@ -31,6 +31,7 @@ COPY src ./src
 COPY sentinai ./sentinai
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+COPY sentinai-policy.yml ./sentinai-policy.yml
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 RUN mkdir -p logs data && chown -R sentinai:sentinai /app
 USER sentinai
