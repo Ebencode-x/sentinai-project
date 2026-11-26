@@ -22,6 +22,9 @@ from src.models.events import LogIncident, RemediationSuggestion
 
 logger = logging.getLogger(__name__)
 
+OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+
 # ---------------------------------------------------------------------------
 # JSON schema model — matches what we ask the LLM to return.
 # ---------------------------------------------------------------------------
@@ -120,10 +123,15 @@ class StubLLMClient(BaseLLMClient):
 class OpenAILLMClient(BaseLLMClient):
     """OpenAI Chat Completions adapter with structured JSON output."""
 
-    chat_url = "https://api.openai.com/v1/chat/completions"
-
-    def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        timeout_seconds: float,
+        chat_url: str = OPENAI_CHAT_URL,
+    ) -> None:
         self._api_key = api_key
+        self.chat_url = chat_url
         self._model = model or "gpt-4o-mini"
         self.model_name = self._model
         self._timeout_seconds = timeout_seconds
@@ -185,7 +193,7 @@ class ClaudeLLMClient(BaseLLMClient):
         }
 
         body = _post_json_with_retry(
-            url="https://api.anthropic.com/v1/messages",
+            url=ANTHROPIC_MESSAGES_URL,
             headers=headers,
             json_body=payload,
             timeout_seconds=self._timeout_seconds,
@@ -224,13 +232,12 @@ def build_llm_client() -> BaseLLMClient:
         if not base.startswith("https://") or not settings.llm_model:
             logger.warning("openai_compat needs https LLM_BASE_URL and LLM_MODEL; using stub.")
             return StubLLMClient()
-        client = OpenAILLMClient(
+        return OpenAILLMClient(
             api_key=settings.llm_api_key,
             model=settings.llm_model,
             timeout_seconds=settings.llm_timeout_seconds,
+            chat_url=base + "/chat/completions",
         )
-        client.chat_url = base + "/chat/completions"
-        return client
     return StubLLMClient()
 
 
