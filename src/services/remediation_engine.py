@@ -11,7 +11,11 @@ from src.core.rate_limiter import llm_rate_limiter, pr_rate_limiter
 from src.integrations import notifier
 from src.integrations.github_client import GitHubClient
 from src.integrations.llm_client import BaseLLMClient, StubLLMClient, build_llm_client
-from src.integrations.patch_utils import PatchRejected, parse_single_file_patch
+from src.integrations.patch_utils import (
+    PatchRejected,
+    canonicalize_patch,
+    parse_single_file_patch,
+)
 from src.models.events import LogIncident, RemediationSuggestion
 from src.services.incident_redaction import redact_incident
 from src.services.policy_engine import PatchPolicyEngine
@@ -75,15 +79,19 @@ class RemediationEngine:
         if not self._enforce_policy or not suggestion.proposed_patch:
             return suggestion, False
         try:
-            patch_file, patch_set = parse_single_file_patch(suggestion.proposed_patch)
+            canonical = canonicalize_patch(suggestion.proposed_patch)
+            patch_file, patch_set = parse_single_file_patch(canonical)
         except PatchRejected:
             return suggestion, False
+        if canonical != suggestion.proposed_patch:
+            # Policy and PR must see the exact text that will be applied
+            suggestion = suggestion.model_copy(update={"proposed_patch": canonical})
         if self._policy is None:
             reason = f"policy unavailable ({self._policy_error})"
             return self._withhold(suggestion, incident_id, reason), False
         try:
             result = self._policy.check(
-                patch=suggestion.proposed_patch,
+                patch=canonical,
                 patch_file=patch_file,
                 files_changed=len(patch_set),
             )
