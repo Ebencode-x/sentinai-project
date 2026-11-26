@@ -14,7 +14,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import unidiff
+from src.integrations.patch_utils import (
+    PatchRejected,
+    apply_verified,
+    normalize_repo_path,
+    parse_single_file_patch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,28 +73,48 @@ class PatchRunner:
         workspace:
             Isolated temp directory for this pipeline run.
         """
-        source = self._root / patch_file
+        try:
+            rel_path = normalize_repo_path(patch_file)
+        except PatchRejected as exc:
+            return PatchResult(success=False, error=f"Unsafe patch path: {exc}")
+
+        source = self._root / rel_path
+        dest = workspace / rel_path
+        if not source.resolve().is_relative_to(self._root):
+            return PatchResult(
+                success=False,
+                error=f"Source path leaves the project root: {rel_path}",
+            )
+        if not dest.resolve().is_relative_to(workspace.resolve()):
+            return PatchResult(
+                success=False,
+                error=f"Target path leaves the workspace: {rel_path}",
+            )
         if not source.exists():
             return PatchResult(
                 success=False,
                 error=f"Source file not found: {source}",
             )
 
-        dest = workspace / patch_file
         dest.parent.mkdir(parents=True, exist_ok=True)
 
         try:
             original = source.read_text(encoding="utf-8")
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             return PatchResult(success=False, error=f"Cannot read source: {exc}")
 
         try:
-            patch_set = unidiff.PatchSet(patch)
-        except Exception as exc:
+            header_file, patch_set = parse_single_file_patch(patch)
+        except PatchRejected as exc:
             return PatchResult(success=False, error=f"Invalid unified diff: {exc}")
+        if header_file != rel_path:
+            return PatchResult(
+                success=False,
+                error=f"Diff header {header_file} does not match patch_file {rel_path}",
+            )
 
         try:
-            patched = _apply_patch(original, patch_set)
+            patched = apply_verified(original, patch_set)
         except Exception as exc:
             return PatchResult(success=False, error=f"Patch application error: {exc}")
 
@@ -149,28 +174,3 @@ class PatchRunner:
             output=output,
             returncode=proc.returncode,
         )
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _apply_patch(original: str, patch_set: unidiff.PatchSet) -> str:
-    """Apply a parsed unidiff PatchSet to original file content."""
-    lines = original.splitlines(keepends=True)
-    for patched_file in patch_set:
-        for hunk in reversed(list(patched_file)):
-            start = hunk.source_start - 1
-            length = hunk.source_length
-            new_lines = [
-                line.value
-                for line in hunk
-                if line.line_type
-                in (
-                    unidiff.LINE_TYPE_ADDED,
-                    unidiff.LINE_TYPE_CONTEXT,
-                )
-            ]
-            lines[start : start + length] = new_lines
-    return "".join(lines)
